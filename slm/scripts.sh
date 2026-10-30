@@ -36,6 +36,7 @@ echo "== evaluate"
 [ -x /content/vllm-env/bin/python ] || uv venv -q --python 3.12 /content/vllm-env
 uv pip install -q --python /content/vllm-env/bin/python "vllm==0.30.0" "pydantic>=2.12,<3"
 # vLLM compiles kernels on first use with the environment's own ninja.
-PATH=/content/vllm-env/bin:$PATH /content/vllm-env/bin/python evaluate_scripts.py --model "$OUT/merged" --data "$DATA" \
-  --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real /content/input/real-test-v1.jsonl \
-  --output "$OUT/report.json"
+PATH=/content/vllm-env/bin:$PATH /content/vllm-env/bin/python evaluate_scripts.py --model "$OUT/merged" \
+  --data "$DATA" --compounds "$RUNS/scripts-data/dev-compounds.jsonl" \
+  --real /content/input/real-test-v1.jsonl \
+  --variants free-exact,free-fuzzy,constrained-exact,constrained-fuzzy --output "$OUT/report.json"

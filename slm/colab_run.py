@@ -22,6 +22,7 @@ import os
 import subprocess
 import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -109,7 +110,7 @@ def data_archive(bundle):
     return target
 
 
-def upload_input(session, path, part=32 * 1024 * 1024):
+def upload_input(session, path, part=16 * 1024 * 1024):
     """A file or folder at /content/input/<name>; folders go as a tarball, and large files
     in parts joined on the VM, since one large upload through the notebook API can fail."""
     name = path.name
@@ -120,11 +121,25 @@ def upload_input(session, path, part=32 * 1024 * 1024):
         path = packed
     data = path.read_bytes()
     pieces = [data[i : i + part] for i in range(0, len(data), part)] or [b""]
-    for index, piece in enumerate(pieces):
+
+    def send(index):
+        # Each upload connection through the notebook proxy is slow and sometimes drops,
+        # so parts go in parallel and are retried.
         chunk = LOCAL / f"{path.name}.{index:03d}"
-        chunk.write_bytes(piece)
-        colab("upload", "-s", session, str(chunk), f"/content/input/{path.name}.{index:03d}", timeout=1800)
-        chunk.unlink()
+        chunk.write_bytes(pieces[index])
+        try:
+            for attempt in range(4):
+                try:
+                    return colab("upload", "-s", session, str(chunk),
+                                 f"/content/input/{path.name}.{index:03d}", timeout=1800)
+                except RuntimeError:
+                    if attempt == 3:
+                        raise
+        finally:
+            chunk.unlink()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(send, range(len(pieces))))
     print(
         remote(
             session,
@@ -241,8 +256,10 @@ def collect(args):
         f"""
 import glob, json, os, subprocess
 os.chdir({RUNS!r})
-patterns = ("*.log", "*/*.json", "*/*.jsonl", "*/*.jsonl.gz")
-files = [p for pattern in patterns for p in glob.glob(pattern) if os.path.isfile(p)]
+# Only small reports and logs leave the VM; models and datasets stay there.
+patterns = ("*.log", "*/*.json", "*/*.jsonl")
+files = [p for pattern in patterns for p in glob.glob(pattern)
+         if os.path.isfile(p) and os.path.getsize(p) <= 5 * 1024 * 1024]
 subprocess.run(["tar", "-czf", "/content/results.tar.gz", *files, *{names.split()!r}], check=True)
 print({MARK!r} + json.dumps({{"files": len(files), "bytes": os.path.getsize("/content/results.tar.gz")}}))
 """,
