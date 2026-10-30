@@ -1,0 +1,32 @@
+slm/evaluate_scripts.py
+  s_4d9165ed3ec1fd::t_5a4d77c72251ef 115,128,135-139,147,215
+slm/scripts.sh
+  s_4d9165ed3ec1fd::t_c18e10dcd5c867 4,7-10,14-17,20,23,27-30,33,40,43-45,53,56-60,64-65,67-84
+  s_4d9165ed3ec1fd::t_5a4d77c72251ef 37
+  s_4d9165ed3ec1fd::t_b969be55f00909 41-42
+  s_4d9165ed3ec1fd::t_e17daa5b413fdb 46-52,54-55
+slm/train.py
+  s_4d9165ed3ec1fd::t_0bf05b2a4e0483 387,414,416-417,429-430,442,444,453
+  s_4d9165ed3ec1fd::t_0730fb22270bc4 12-16,22,30,37,184-193,196,254-257,260,266-271,300,310-316,320-323,356-357,378,393-395,397,399-411,413,415,421,424,443,452
+  s_4d9165ed3ec1fd::t_1e23a25aa05b86 112-114,119,367-369
+  s_4d9165ed3ec1fd::t_1e9d5a68eba2f9 445
+slm/kaggle_run.py
+  s_4d9165ed3ec1fd::t_b969be55f00909 33,54,115,151-152
+  s_4d9165ed3ec1fd::t_49497cdfafb452 1-32,34-53,55-114,116-150,153-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e00735f9f58bf5e64e7d8afd54af0f18cc3356ac",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
