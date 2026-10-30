@@ -30,6 +30,23 @@ Raw (unguarded) scores unless marked. Most remaining command errors are refusals
 right but 10% of their refusals, because rules such as duplicate-name ambiguity are
 nearly absent from the v7 training data.
 
+## Real diagram conversations (2026-10-30)
+
+`slm/mine_chats.py` (run on a Colab CPU VM by `slm/mine.sh`, 0.07 compute units) read
+3,199,860 WildChat-4.8M and 94,145 ShareGPT conversations and kept 14,043 that ask for a
+diagram, with 43,279 user turns. Of those, 1,098 follow-ups come right after the
+assistant produced diagram code (402 PlantUML, 299 Mermaid, the rest graph/DOT/sequence);
+802 are English or unlabelled. The broader keyword filter for edit-like follow-ups
+(6,987) is mostly noise ("mermaid" hair colours, questions that mention a diagram).
+
+The follow-ups after diagram code show how people actually edit: mostly compound or
+high-level requests ("add more objects and arrows to manage multiple companies",
+"make it top to bottom", "include steps for a lien or a damaged title", "the compliance
+check is done by the sending bank, not the recipient bank"), plus fix requests after
+syntax errors. Few are single atomic edits like the current one-action contract expects.
+The mined files stay in `runs/colab/mine/` and are not committed, since they hold users'
+chat text.
+
 ## Running on Colab
 
 `slm/colab_run.py` starts `slm/job.sh` on a Colab GPU VM, follows its log, and collects
