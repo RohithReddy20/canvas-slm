@@ -9,12 +9,17 @@ Either way only reply positions are projected to the vocabulary.
 
 --autotune benchmarks settings (attention kernel, Liger kernels, activation checkpointing,
 tokens per micro-batch) in separate processes on real batches, rejects any whose loss on a
-fixed probe set drifts from the plain padded baseline, and trains with the fastest one.
+fixed probe set drifts from the plain padded baseline, and trains with the fastest one;
+with --tune-only it records the choice and exits, for a multi-GPU launch to read.
+
+GPUs without BF16 (T4) train in FP16 with loss scaling. Under torchrun each process takes a
+share of every optimizer step's micro-batches and the LoRA gradients are summed.
 """
 
 import argparse
 import json
 import math
+import os
 import random
 import subprocess
 import sys
@@ -22,13 +27,14 @@ import time
 from pathlib import Path
 
 import torch
+import torch.distributed as dist
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from prompt import messages, parse, reply
 
 PACKED_ATTENTION = ("kernels-community/flash-attn", "flash_attention_2")
-# Dense BF16 tensor peaks, for the utilisation estimate only.
+# Dense 16-bit tensor peaks, for the utilisation estimate only.
 PEAK_FLOPS = {"H100": 989e12, "A100": 312e12, "RTX PRO 6000": 500e12, "L4": 121e12, "T4": 65e12}
 PROBE_ROWS = 48
 TOLERANCE = 0.02
@@ -103,12 +109,14 @@ def micro_batches(examples, max_tokens, packed, rng):
     return batches
 
 
-def optimizer_steps(batches, rows_per_step):
+def optimizer_steps(batches, rows_per_step, world=1):
+    """Micro-batches grouped into steps of at least rows_per_step rows; a multiple of the
+    GPU count each, so no GPU waits out a step."""
     steps, current, count = [], [], 0
     for batch in batches:
         current.append(batch)
         count += len(batch)
-        if count >= rows_per_step:
+        if count >= rows_per_step and len(current) % world == 0:
             steps.append(current)
             current, count = [], 0
     if current:
@@ -173,9 +181,19 @@ class ReplyLoss:
         return loss, int(mask.sum())
 
 
+def gpu_query(field):
+    output = subprocess.run(["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader,nounits"],
+                            capture_output=True, text=True).stdout
+    return float(output.split()[0])
+
+
+def half_dtype():
+    return torch.bfloat16 if torch.cuda.get_device_capability()[0] >= 8 else torch.float16
+
+
 def load_model(args, attention):
     model = AutoModelForCausalLM.from_pretrained(
-        args.model, dtype=torch.bfloat16, attn_implementation=attention
+        args.model, dtype=half_dtype(), attn_implementation=attention
     ).cuda()
     if args.liger:
         from liger_kernel.transformers import _apply_liger_kernel_to_instance
@@ -233,20 +251,24 @@ def autotune(args):
         return result
 
     # Short benchmarks understate the peak of a full run, so a setting needs headroom.
-    total_gb = float(
-        subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                       capture_output=True, text=True).stdout.split()[0]
-    ) / 1024
+    total_gb = gpu_query("memory.total") / 1024
+
+    def fits(result):
+        return result["valid"] and result["peak_gb"] <= HEADROOM * total_gb
 
     def best():
-        valid = [r for r in results if r["valid"] and r["peak_gb"] <= HEADROOM * total_gb]
+        valid = [r for r in results if fits(r)]
         if not valid:
             raise SystemExit("No benchmarked setting worked.")
         top = max(valid, key=lambda r: r["tokens_per_second"])
         return {k: top[k] for k in ("attention", "liger", "checkpointing", "max_tokens")}
 
-    run({"attention": "sdpa", "liger": 0, "checkpointing": 1, "max_tokens": args.max_tokens})
-    for attention in PACKED_ATTENTION:
+    baseline = {"attention": "sdpa", "liger": 0, "checkpointing": 1, "max_tokens": args.max_tokens}
+    # Smaller GPUs start from a smaller micro-batch.
+    while not fits(run(baseline)) and baseline["max_tokens"] > 2048:
+        baseline["max_tokens"] //= 2
+    # FlashAttention kernels need Ampere or newer.
+    for attention in PACKED_ATTENTION if gpu_query("compute_cap") >= 8 else ():
         run({**best(), "attention": attention})
     run({**best(), "liger": 1})
     chosen = best()
@@ -275,6 +297,7 @@ def main():
     parser.add_argument("--liger", type=int, default=0)
     parser.add_argument("--checkpointing", type=float, default=1, help="share of layers")
     parser.add_argument("--autotune", action="store_true")
+    parser.add_argument("--tune-only", action="store_true", help="with --autotune: record the choice, exit")
     parser.add_argument("--benchmark", type=int, help="time this many steps, print BENCH, exit")
     parser.add_argument("--benchmark-steps", type=int, default=8)
     parser.add_argument("--merge", action="store_true", help="also save merged weights")
@@ -284,10 +307,20 @@ def main():
         raise SystemExit("Give exactly one of --data and --rows.")
 
     torch.backends.cuda.matmul.allow_tf32 = True
+    world = int(os.environ.get("WORLD_SIZE", 1))
+    rank = int(os.environ.get("RANK", 0))
+    if world > 1:
+        if args.autotune or args.benchmark:
+            raise SystemExit("Tune and benchmark in one process; launch the chosen setting with torchrun.")
+        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
+        dist.init_process_group("nccl")
     if args.autotune:
         best, results = autotune(args)
         args.output.mkdir(parents=True, exist_ok=True)
-        (args.output / "autotune.json").write_text(json.dumps(results, indent=2))
+        (args.output / "autotune.json").write_text(json.dumps({"chosen": best, "results": results}, indent=2))
+        if args.tune_only:
+            print("TUNED " + json.dumps(best), flush=True)
+            return
         for key in ("attention", "liger", "checkpointing", "max_tokens"):
             setattr(args, key, best[key])
         print(f"training with {json.dumps(best)}", flush=True)
@@ -320,7 +353,8 @@ def main():
     # to each other would show up as a different loss.
     probe = sorted(range(len(examples)), key=ids.__getitem__)[:PROBE_ROWS]
     model.eval()
-    with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+    dtype = half_dtype()
+    with torch.no_grad(), torch.autocast("cuda", dtype=dtype):
         probe_sum = sum(
             loss_of(examples, probe[i : i + 8])[0].item() for i in range(0, len(probe), 8)
         )
@@ -330,7 +364,9 @@ def main():
     epochs = math.ceil(args.epochs)
     plan = []
     for epoch in range(epochs):
-        steps = optimizer_steps(micro_batches(examples, args.max_tokens, packed, rng), args.rows_per_step)
+        steps = optimizer_steps(
+            micro_batches(examples, args.max_tokens, packed, rng), args.rows_per_step, world
+        )
         if epoch + 1 > args.epochs:
             steps = steps[: round(len(steps) * (args.epochs - epoch))]
         plan.extend(steps)
@@ -339,6 +375,7 @@ def main():
     warmup = max(1, round(0.03 * len(plan)))
     trainable = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=args.learning_rate, weight_decay=0.0, fused=True)
+    scaler = torch.amp.GradScaler("cuda", enabled=dtype == torch.float16)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
         lambda step: (step + 1) / warmup
@@ -347,33 +384,50 @@ def main():
     )
 
     args.output.mkdir(parents=True, exist_ok=True)
-    start, seen_tokens, recent, timed = time.time(), 0, [], None
+    start, seen_tokens, recent, timed, skipped = time.time(), 0, [], None, 0
     for number, step in enumerate(plan, 1):
         if args.benchmark and number == 3:
             torch.cuda.synchronize()
             timed = (time.time(), seen_tokens)
         targets = sum(len(examples[i][1]) for batch in step for i in batch)
-        total = 0.0
-        for batch in step:
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+        total, tokens_here = 0.0, 0
+        for batch in step[rank::world]:
+            with torch.autocast("cuda", dtype=dtype):
                 loss, tokens = loss_of(examples, batch)
-            (loss / targets).backward()
+            scaler.scale(loss / targets).backward()
             total += loss.item()
-            seen_tokens += tokens
+            tokens_here += tokens
+        if world > 1:
+            # One flat sum keeps the exchange to a single call per step.
+            grads = [p.grad if p.grad is not None else torch.zeros_like(p) for p in trainable]
+            flat = torch.cat([g.flatten() for g in grads] + [torch.tensor([total, tokens_here], device="cuda")])
+            dist.all_reduce(flat)
+            offset = 0
+            for p, g in zip(trainable, grads, strict=True):
+                p.grad = flat[offset : offset + g.numel()].view_as(g)
+                offset += g.numel()
+            total, tokens_here = flat[-2].item(), int(flat[-1].item())
+        seen_tokens += tokens_here
+        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(trainable, 1.0)
-        optimizer.step()
+        scaler.step(optimizer)
+        scale = scaler.get_scale()
+        scaler.update()
+        # A lowered FP16 loss scale means the step overflowed and was skipped.
+        skipped += scaler.get_scale() < scale
         scheduler.step()
         optimizer.zero_grad(set_to_none=True)
         recent.append(total / targets)
-        if not args.benchmark and (number % 20 == 0 or number == len(plan)):
+        if rank == 0 and not args.benchmark and (number % 20 == 0 or number == len(plan)):
             elapsed = time.time() - start
             rate = seen_tokens / elapsed
-            peak = peak_flops()
+            peak = peak_flops() and peak_flops() * world
             utilisation = (4 + 2 * args.checkpointing) * parameters * rate / peak if peak else 0
             print(
                 f"step {number}/{len(plan)} loss {sum(recent) / len(recent):.4f} "
                 f"lr {scheduler.get_last_lr()[0]:.2e} {rate:.0f} tok/s ~{utilisation:.0%} of peak "
-                f"eta {elapsed / number * (len(plan) - number) / 60:.1f} min",
+                f"eta {elapsed / number * (len(plan) - number) / 60:.1f} min"
+                + (f" skipped {skipped}" if skipped else ""),
                 flush=True,
             )
             recent = []
@@ -385,13 +439,18 @@ def main():
             "peak_gb": round(torch.cuda.max_memory_allocated() / 1e9, 1),
         }), flush=True)
         return
+    if world > 1:
+        dist.destroy_process_group()
+    if rank:
+        return
     model.save_pretrained(args.output / "adapter")
     tokenizer.save_pretrained(args.output / "adapter")
     (args.output / "training.json").write_text(json.dumps({
         **{key: str(value) for key, value in vars(args).items()},
         "rows": len(examples), "dropped": dropped, "optimizer_steps": len(plan),
         "train_tokens": seen_tokens, "seconds": time.time() - start, "probe_loss": probe_loss,
-        "peak_memory_gb": torch.cuda.max_memory_allocated() / 1e9,
+        "peak_memory_gb": torch.cuda.max_memory_allocated() / 1e9, "gpus": world,
+        "dtype": str(dtype), "skipped_steps": skipped,
     }, indent=2))
     print(f"saved {args.output / 'adapter'}", flush=True)
     if args.merge:

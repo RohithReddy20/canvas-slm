@@ -112,7 +112,7 @@ def commands(model, rows, constrained=False, fuzzy=False):
 def sessions(model, cases, constrained=False, fuzzy=False):
     live = [(c, CanvasSession(c["initial_canvas"]), CanvasSession(c["initial_canvas"])) for c in cases]
     turns = matched = matched_right = agree = 0
-    first_errors = {}
+    first_errors, diagnoses = {}, []
     for turn in range(max(len(c["turns"]) for c in cases)):
         active = [entry for entry in live if turn < len(entry[0]["turns"])]
         for case, actual, oracle in active:
@@ -125,15 +125,18 @@ def sessions(model, cases, constrained=False, fuzzy=False):
             step = case["turns"][turn]
             was_matched = actual.snapshot() == oracle.snapshot()
             prefix = f"{case['id']}:created-{turn}"
-            apply(text, actual, step["command"], prefix, fuzzy)
+            outcome = apply(text, actual, step["command"], prefix, fuzzy)
             oracle.execute(step["command"], step["expected"], prefix)
             same = actual.snapshot() == oracle.snapshot()
             turns += 1
             agree += same
             matched += was_matched
             matched_right += was_matched and same
-            if not same:
-                first_errors.setdefault(case["id"], turn + 1)
+            if not same and case["id"] not in first_errors:
+                first_errors[case["id"]] = turn + 1
+                diagnoses.append({"case": case["id"], "turn": turn + 1, "command": step["command"],
+                                  "expected": step["expected"], "outcome": outcome,
+                                  "matched_before": was_matched, "reply": text[:600]})
     return {
         "sessions": len(cases),
         "turns": turns,
@@ -141,6 +144,7 @@ def sessions(model, cases, constrained=False, fuzzy=False):
         "accuracy_when_state_matched": matched_right / matched if matched else None,
         "mean_first_error_turn": sum(first_errors.values()) / len(first_errors) if first_errors else None,
         "perfect_sessions": len(cases) - len(first_errors),
+        "first_errors": diagnoses,
     }
 
 
@@ -208,7 +212,7 @@ def main():
         if real_rows:
             report[variant]["real"] = real(model, real_rows, **options)
         brief = {
-            name: {k: v for k, v in part.items() if k not in ("cases", "per_stratum")}
+            name: {k: v for k, v in part.items() if k not in ("cases", "per_stratum", "first_errors")}
             for name, part in report[variant].items()
         }
         print(variant, json.dumps(brief), flush=True)
