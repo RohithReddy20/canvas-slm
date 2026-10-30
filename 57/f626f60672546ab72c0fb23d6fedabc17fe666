@@ -1,0 +1,36 @@
+slm/evaluate_scripts.py
+  s_4d9165ed3ec1fd::t_1dba7ac0ba2833 1-63,65-95,97-174
+  s_4d9165ed3ec1fd::t_127c92cead0847 64,96
+slm/synth.py
+  s_4d9165ed3ec1fd::t_43db928cb86930 1-130
+slm/prompt.py
+  s_4d9165ed3ec1fd::t_f8ac12e8cc6126 75-76,91-95
+slm/prepare_scripts.py
+  s_4d9165ed3ec1fd::t_10bf7d4d97576c 1-70
+slm/convert.py
+  s_4d9165ed3ec1fd::t_1de1392612745f 27-32
+slm/contract.py
+  s_4d9165ed3ec1fd::t_736543d9496581 245-291
+  s_4d9165ed3ec1fd::t_127c92cead0847 153-154
+slm/train.py
+  s_4d9165ed3ec1fd::t_1dcfc3855549b4 1-13,19-20,30-35,57-63,67-71,74,84-92,94-95,97,99,118-203,209-211,219-220,224,226-227,251-252,255,261-267,270-279,285-286,288-289,296,300-305,309-310,314-315,320,324-325,327-328,333,337,339-341,346,349-350,355,357-359,362,367-374,377-382,384-388
+  s_4d9165ed3ec1fd::t_cfd6cf23506c11 72-73,80-81,204-208,212-218,221-223,225,228-245,280,290,306-308,311-313
+slm/scripts.sh
+  s_4d9165ed3ec1fd::t_043d260ff20810 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "57f626f60672546ab72c0fb23d6fedabc17fe666",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
