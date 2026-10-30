@@ -1,0 +1,40 @@
+slm/run.sh
+  s_4d9165ed3ec1fd::t_5fee880b37979a 2-4,6
+slm/colab_run.py
+  s_4d9165ed3ec1fd::t_abd177ea1d135e 175,208,212-213
+  s_4d9165ed3ec1fd::t_9b5bed36be928d 185-186,189
+  s_4d9165ed3ec1fd::t_4931fc97f875d4 112
+  s_4d9165ed3ec1fd::t_75ff535cea1c04 3-4
+  s_4d9165ed3ec1fd::t_a108c3dda935ef 201-202
+  s_4d9165ed3ec1fd::t_8cae2e7024bbf3 250-251
+  s_4d9165ed3ec1fd::t_964abe3581a3c3 240-242
+  s_4d9165ed3ec1fd::t_d6a28262491ab5 125-127,132
+  s_4d9165ed3ec1fd::t_0c98ed33e40e61 155-156
+slm/mine_chats.py
+  s_4d9165ed3ec1fd::t_49701cff0de037 200-205
+  s_4d9165ed3ec1fd::t_d69eb417f86062 80
+  s_4d9165ed3ec1fd::t_aeee741f000bcf 181-183
+  s_4d9165ed3ec1fd::t_b9fcbe818272cf 167
+  s_4d9165ed3ec1fd::t_0c8fdfc9bb7900 91-92,98
+  s_4d9165ed3ec1fd::t_e34ae080f8b745 33-34
+  s_4d9165ed3ec1fd::t_9016a3e1420ea5 178-179
+  s_4d9165ed3ec1fd::t_9bfa5a3606c662 1-32,35-79,81-90,93-97,99-166,168-177,180,184-199,206-213
+slm/mine.sh
+  s_4d9165ed3ec1fd::t_b7317b2380a846 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0fc75679d4d5e0ff528f5fd3d9c367f48f8f4e34",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
