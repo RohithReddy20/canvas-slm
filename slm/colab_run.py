@@ -2,6 +2,7 @@
 
     python slm/colab_run.py start --gpu A100 --bundle /path/to/v7-kaggle-dataset
     python slm/colab_run.py start --job mine.sh --gpu none --high-mem --session mine
+    python slm/colab_run.py start --job teach.sh --gpu G4 --session teach --input runs/colab/teach-input.jsonl
     python slm/colab_run.py status
     python slm/colab_run.py watch      # waits for the end, collects results, stops the VM
     python slm/colab_run.py collect [--adapters q17 ...]
@@ -140,12 +141,15 @@ os.makedirs({RUNS!r}, exist_ok=True)
 if os.path.exists({RUNS!r} + "/run.log"):
     os.rename({RUNS!r} + "/run.log", {RUNS!r} + f"/run-{{int(time.time())}}.log")
 os.makedirs({REMOTE!r}, exist_ok=True)
+os.makedirs("/content/input", exist_ok=True)
 with tarfile.open("/content/source.tar.gz") as archive:
     archive.extractall({REMOTE!r}, filter="data")
 print({MARK!r} + json.dumps({{"files": sorted(os.listdir({REMOTE!r}))}}))
 """,
         )
     )
+    for path in args.input:
+        colab("upload", "-s", args.session, str(path), f"/content/input/{path.name}", timeout=1800)
     cell = f"""
 import os, subprocess
 with open({RUNS!r} + "/run.log", "a") as log:
@@ -241,6 +245,7 @@ def main():
     parser.add_argument("--high-mem", action="store_true")
     parser.add_argument("--job", default="job.sh", help="script in slm/ that run.sh runs")
     parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--input", type=Path, nargs="*", default=[], help="files for /content/input")
     parser.add_argument("--deadline", type=int, default=300, help="minutes")
     parser.add_argument("--every", type=float, default=5, help="minutes between log reads")
     parser.add_argument("--adapters", nargs="*", default=[])
