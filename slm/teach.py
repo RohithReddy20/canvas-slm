@@ -99,7 +99,8 @@ def message(row):
 
 
 def parse(text):
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
+    # The chat template opens the thinking block in the prompt, so only its end appears here.
+    text = text.rsplit("</think>", 1)[-1].strip()
     fenced = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
     candidate = fenced[-1] if fenced else text[text.find("{") : text.rfind("}") + 1]
     answer = json.loads(candidate)
@@ -131,13 +132,13 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="Qwen/Qwen3.8-27B-FP8")
     parser.add_argument("--chunk", type=int, default=128)
-    parser.add_argument("--max-tokens", type=int, default=8192)
+    parser.add_argument("--max-tokens", type=int, default=12288)
     args = parser.parse_args()
     from vllm import LLM, SamplingParams
 
     rows = [json.loads(line) for line in open(args.input)]
     args.output.mkdir(parents=True, exist_ok=True)
-    llm = LLM(model=args.model, max_model_len=16384, gpu_memory_utilization=0.92, max_num_seqs=64)
+    llm = LLM(model=args.model, max_model_len=20480, gpu_memory_utilization=0.92, max_num_seqs=64)
     # Qwen's recommended sampling in thinking mode; greedy decoding loops.
     sampling = SamplingParams(temperature=0.6, top_p=0.95, top_k=20, max_tokens=args.max_tokens)
     counts, start = Counter(), time.time()
@@ -163,7 +164,7 @@ def main():
                     counts[f"kind:{answer.get('edit_kind')}"] += answer["category"] == "edit"
                     counts["applied"] += bool(record.get("applied"))
                 except (ValueError, json.JSONDecodeError) as error:
-                    record.update(answer=None, parse_error=str(error)[:300], raw=text[-3000:])
+                    record.update(answer=None, parse_error=str(error)[:300], raw=text)
                     counts["unparsed"] += 1
                 labels.write(json.dumps(record, ensure_ascii=False) + "\n")
             labels.flush()
