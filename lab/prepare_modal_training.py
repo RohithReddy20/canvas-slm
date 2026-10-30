@@ -329,7 +329,7 @@ def committed_training_sources():
     checksums = {name: digest(TRAINING / name) for name in LEXICAL_SOURCE_NAMES}
     for name, checksum in checksums.items():
         committed = subprocess.check_output(
-            ["git", "show", f"{commit}:templates/agent/training/{name}"], cwd=TRAINING
+            ["git", "show", f"{commit}:lab/{name}"], cwd=TRAINING
         )
         if bytes_digest(committed) != checksum:
             raise ValueError(

@@ -12,7 +12,7 @@ labelled "model-written" below is synthetic, like the current data.
 
 | Source | What it is | Size | License | Use |
 |---|---|---|---|---|
-| [allenai/WildChat-4.8M](https://huggingface.co/datasets/allenai/WildChat-4.8M) | Real user conversations with ChatGPT, many multi-turn | 4.8M conversations | ODC-BY, not gated | Filter for diagram requests (mermaid, UML, ER, flowchart, class diagram, draw.io) and their follow-up edits ("add email to User", "connect X to Y"). Real phrasing for a test set and teacher-model seeds. Counts pending: HF search index was still loading. |
+| [allenai/WildChat-4.8M](https://huggingface.co/datasets/allenai/WildChat-4.8M) | Real user conversations with ChatGPT, many multi-turn | 3,199,860 public conversations | ODC-BY, not gated | Filter for diagram requests (mermaid, UML, ER, flowchart, class diagram, draw.io) and their follow-up edits ("add email to User", "connect X to Y"). Real phrasing for a test set and teacher-model seeds. Counts pending: HF search index was still loading. |
 | [allenai/WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M) | Earlier subset of the above | 1M | ODC-BY | Same |
 | [ShareGPT_Vicuna_unfiltered](https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered) | Real shared ChatGPT conversations | ~90k | Apache-2.0 (as listed) | Same filtering |
 | [lmsys/lmsys-chat-1m](https://huggingface.co/datasets/lmsys/lmsys-chat-1m) | Real user conversations, 25 models | 1M | Gated, custom terms | Same, after accepting terms |
@@ -32,7 +32,9 @@ labelled "model-written" below is synthetic, like the current data.
 | [dimsavva/drawio-sft](https://huggingface.co/datasets/dimsavva/drawio-sft), [masamasa4/drawio-xml](https://huggingface.co/datasets/masamasa4/drawio-xml), [miracle10/DwT_drawio](https://huggingface.co/datasets/miracle10/DwT_drawio) | draw.io diagrams, some paired with instructions | 10k–100k (drawio-sft) | MIT / unspecified / other | Diagram structures with boxes, labels, edges |
 | [ModelSet](https://github.com/modelset) ([paper](https://link.springer.com/doi/10.1007/s10270-021-00929-3)) | Labelled real UML and Ecore models from GitHub | 5,120 UML + 5,466 Ecore | LGPL-3.0 | Real class names, attributes, methods and associations for schema boxes, replacing the synthetic name lists |
 | [iisys-hof/uml-class-diagrams](https://huggingface.co/datasets/iisys-hof/uml-class-diagrams) | UML class diagrams | 1k–10k | Unspecified | Same |
-| [b-mc2/sql-create-context](https://huggingface.co/datasets/b-mc2/sql-create-context), [xlangai/spider](https://huggingface.co/datasets/xlangai/spider), [BIRD](https://huggingface.co/datasets/birdsql/bird_sql_dev_20251106) | Real database schemas (tables, columns, foreign keys) | 78k / 1k+ | CC-BY-4.0 / CC-BY-SA-4.0 | Realistic entities and fields; foreign keys become connections |
+| [b-mc2/sql-create-context](https://huggingface.co/datasets/b-mc2/sql-create-context) | Questions with `CREATE TABLE` schemas | 78k | CC-BY-4.0 | Realistic entities and fields |
+| [xlangai/spider](https://huggingface.co/datasets/xlangai/spider) | Text-to-SQL over 200 real-style databases | 1k–10k questions | CC-BY-SA-4.0 | Multi-table schemas; foreign keys become connections |
+| [BIRD dev](https://huggingface.co/datasets/birdsql/bird_sql_dev_20251106) | Text-to-SQL over large real databases | 1k–10k questions | CC-BY-SA-4.0 | Same |
 
 ## 3. When to act vs refuse (the main error source in the 0.6B run)
 
@@ -51,7 +53,7 @@ labelled "model-written" below is synthetic, like the current data.
 
 ## Not found
 
-- No public tldraw usage or command logs. The [tldraw agent starter kit](https://tldraw.dev/starter-kits/agent) and [tldraw AI docs](https://tldraw.dev/docs/ai) describe the agent action system but publish no data. `github.com/tldraw/tldraw-datasets`, linked from the HF card, is not public.
+- No public tldraw action-command or user-intent logs (the room history above records edits, not what the user asked for). The [tldraw agent starter kit](https://tldraw.dev/starter-kits/agent) and [tldraw AI docs](https://tldraw.dev/docs/ai) describe the agent action system but publish no data. `github.com/tldraw/tldraw-datasets`, linked from the HF card, is not public.
 
 ## Suggested order for tomorrow
 

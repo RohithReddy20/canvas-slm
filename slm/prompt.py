@@ -135,9 +135,22 @@ def predict(text, command, canvas, history, guarded):
             result = {"prediction": no_action("missing_target"), "error": None}
         if result["prediction"] is not None:
             result["prediction"] = execution_guard(
-                command, result["prediction"], canvas, history or {}
+                command, result["prediction"], canvas, session_history(history, canvas)
             )
     return result
+
+
+def session_history(history, canvas):
+    """The mapping execution_guard reads, also for the list form `messages` accepts."""
+    if isinstance(history, dict) or not history:
+        return history or {}
+    _, identifiers = model_canvas(canvas)
+    references = recent_context(history, {key: key for key in identifiers})
+    return {
+        "turns": history,
+        "last_created_id": references["last_created_id"],
+        "last_edited_id": references["last_edited_id"],
+    }
 
 
 def _unique_object(pairs):

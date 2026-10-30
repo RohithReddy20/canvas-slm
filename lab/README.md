@@ -1,6 +1,6 @@
 # FunctionGemma action-model lab
 
-Moved from `templates/agent/training` in [RohithReddy20/tldraw](https://github.com/RohithReddy20/tldraw/tree/workspace-greeting-11155aa2/templates/agent) with its commit history. The browser voice mode (`client/local-voice/`) and its Playwright tests stay in that fork; paths below that start with `lab/` were `templates/agent/training/` there, and commands run from this repository root.
+Moved from `templates/agent/training` in [RohithReddy20/tldraw](https://github.com/RohithReddy20/tldraw/tree/workspace-greeting-11155aa2/templates/agent) with its commit history. The browser voice mode (`client/local-voice/`) and its Playwright tests stay in that fork; paths below that start with `lab/` were `templates/agent/training/` there, and commands run from this repository root. `kaggle_follow.py --native-check` runs the fork's browser tests, so set `TLDRAW_REPO` to a checkout of the fork first.
 
 ## Local voice canvas
 
@@ -66,14 +66,14 @@ The general-workflow training set contains 329,213 training examples, including
 6,000 corrected requests. It preserves 1,200 validation examples and 2,880 test
 examples, including 12 validation and 24 test sessions. Earlier labels marking
 supported move, delete, styling, and undo commands as unsupported are excluded.
-The reproducible builder is `training/build_workflow.py`; generated artifacts stay
-under `training/runs/v5-general-canvas/`. Session state checks use a Python document
+The reproducible builder is `lab/build_workflow.py`; generated artifacts stay
+under `lab/runs/v5-general-canvas/`. Session state checks use a Python document
 simulation; they do not measure pixel layout or replace the native browser tests.
 The private Kaggle run
 `rohithresearch/canvas-270m-v5-general-workflow` completed all 6,000 updates on two
 Tesla T4 GPUs, with batch eight, micro batch two per GPU, completion window
 160, and a 6,144-token limit. It starts from the retained 15,000-update adapter
-with a fresh optimizer. The checked-in profile is `training/workflow-config.yaml`.
+with a fresh optimizer. The checked-in profile is `lab/workflow-config.yaml`.
 All generated calls passed round-trip checks; the longest example uses 4,330
 tokens and the longest response uses 92. The downloaded weights exactly match the
 final checkpoint, with verified dataset, task, and warm-start hashes. Validation
@@ -87,7 +87,7 @@ show that errors can carry into later edits. Four native browser tests pass. Wit
 6,000-update model, the synthetic speech integration test passes, while the editing
 test fails at "Make it blue." Separate development probes also exposed failures
 for moving down, ungrouping, and redo; these probes are not a held-out benchmark.
-Run metadata and live output are `training/runs/kaggle/workflow/run.json` and
+Run metadata and live output are `lab/runs/kaggle/workflow/run.json` and
 `live.log`. The observer downloads results and verifies final checkpoint weights
 and dataset/task hashes; it compares raw and guarded validation separately and
 preserves the fresh test set. Connection failures are retried within the monitor's
@@ -95,13 +95,13 @@ preserves the fresh test set. Connection failures are retried within the monitor
 
 The next run, `rohithresearch/canvas-270m-v6-spoken-training`, completed 2,000
 additional updates on two Tesla T4 GPUs. It started from the verified 6,000-update
-weights with a fresh optimizer and the profile `training/spoken-config.yaml`.
+weights with a fresh optimizer and the profile `lab/spoken-config.yaml`.
 Its 117,600 training examples comprise 48,000 spoken command variations, 48,000
 replayed examples, and 21,600 turns in 800 editing sessions. These sessions repeatedly
 group, move, ungroup, manually drag, style, delete, undo, and redo. The builder retains
 the original validation and test examples and sessions unchanged. Training artifacts
-stay under `training/runs/v6-spoken-workflow/`; remote run metadata and logs are under
-`training/runs/kaggle/spoken/`.
+stay under `lab/runs/v6-spoken-workflow/`; remote run metadata and logs are under
+`lab/runs/kaggle/spoken/`.
 
 The final checkpoint is downloaded and verified. Both native model integration tests
 pass: a 12-command editing session with manual dragging and undo/redo, and synthetic
@@ -117,7 +117,7 @@ Exact canvas state agreement is 10.56%, with no completely correct test sessions
 Passing the short native tests therefore does not establish reliable long-session
 editing. The frozen evaluation made 7,680 predictions on two T4s in about 1 hour
 55 minutes, without prefix reuse; guarded independent tests had a 1.56-second
-median. Reports are retained under `training/runs/kaggle/spoken/final-score/`.
+median. Reports are retained under `lab/runs/kaggle/spoken/final-score/`.
 
 A separate continuation waits for the native tests to pass before
 launching selected-model scoring on Kaggle: raw and guarded validation, plus guarded
@@ -174,7 +174,7 @@ contexts for 12 sessions totaling 480 turns. It is created and hashed before
 training examples are generated. These synthetic tests do not establish accuracy
 on unstructured human speech or pixel-perfect layouts.
 
-`training/accuracy-config.yaml` retains FunctionGemma 270M and rank-32 LoRA, with a
+`lab/accuracy-config.yaml` retains FunctionGemma 270M and rank-32 LoRA, with a
 fresh optimizer, learning rate 0.00001, global batch eight, and 3,000 updates. That
 is one complete pass over the 24,000 rows. `training-exposure.json` records the
 selected IDs and action counts; checkpoint recovery verifies complete coverage.
@@ -188,8 +188,8 @@ reports now separate document, selection, and camera agreement.
 The private Kaggle job
 [`rohithresearch/canvas-270m-v7-accuracy-refinement`](https://www.kaggle.com/code/rohithresearch/canvas-270m-v7-accuracy-refinement)
 completed 3,000 updates from source commit `2d383d112`. The frozen corpus and sources are under
-`training/runs/v7-accuracy-workflow-revised/`; launch metadata and live logs are
-under `training/runs/kaggle/accuracy/`. Preflight passed 73 Python tests, the
+`lab/runs/v7-accuracy-workflow-revised/`; launch metadata and live logs are
+under `lab/runs/kaggle/accuracy/`. Preflight passed 73 Python tests, the
 function-call token round trips, and a sampler check showing all 24,000 unique
 rows selected exactly once. The longest input is 4,242 tokens and response is 68.
 The monitor uses the frozen source, prevents idle sleep, retrieves and verifies
@@ -208,7 +208,7 @@ These scores use the version-seven development contexts and simulator. Recorded 
 activity averaged 96.08% and 96.25% on the two T4s; median speed was 0.325 optimizer
 updates per second, and training took 9,633 seconds including warmup and saves.
 
-`build_workflow.py --quality-supplement --output training/runs/quality-next/supplement-revised-v2 --seed 72`
+`build_workflow.py --quality-supplement --output lab/runs/quality-next/supplement-revised-v2 --seed 72`
 creates a separate supplement with 2,400 training and 408 development examples.
 It contains 768 training and 96 development contrast pairs across 35 scenarios,
 plus 12 training and three development sessions of 72 turns. Same-context pairs
@@ -233,7 +233,7 @@ Independent semantic review corrected 54 unavailable undo/redo refusal reasons t
 `missing_target`. All 2,808 final inputs pass function-call token round trips;
 the longest input is 4,326 tokens within the 6,144-token sequence limit.
 
-`build_workflow.py --lexical-refinement --output training/runs/quality-next/lexical-refinement-v1 --seed 72`
+`build_workflow.py --lexical-refinement --output lab/runs/quality-next/lexical-refinement-v1 --seed 72`
 creates a separate ordinary-English refinement with 1,200 training and 200
 development rows. These are generated state variants from 132 authored training
 sentence structures and 66 withheld development structures, not 1,400 independent
@@ -260,7 +260,7 @@ review of every example.
 
 ## Local action-model training
 
-The `training/` directory is a Python lab for learning to fine-tune a small instruction
+The `lab/` directory is a Python lab for learning to fine-tune a small instruction
 model. It translates text commands and canvas context into one validated function
 call. The local voice mode above connects that call to speech and the tldraw editor.
 
@@ -360,7 +360,7 @@ uv run --project lab python lab/lab.py train \
   --run my-first-lora
 ```
 
-`training/config.yaml` specifies 15,000 steps, batch size 8, a 200-update learning
+`lab/config.yaml` specifies 15,000 steps, batch size 8, a 200-update learning
 rate warmup to 0.00003 followed by cosine decay to 0.000003, LoRA rank 32 with scale
 8, gradient checkpointing, and a 2,048-token sequence limit. The longest current
 example is 1,444 tokens. This processes 120,000 examples, nearly one pass over training.
@@ -487,7 +487,7 @@ and session validation reports. Training runs directly in the notebook kernel, w
 checkpoints saved every 500 updates. The bundle includes the version-three final
 adapter as the warm start. It refuses to train if the MLX GPU backend is unavailable.
 The test set is
-reserved for the chosen adapter. Extract the results zip into `training/runs/`;
+reserved for the chosen adapter. Extract the results zip into `lab/runs/`;
 the local prediction command reads the saved dtype and recreates the FP16 base
 checkpoint before loading the adapter.
 Uploads and final downloads use 16 MB parts because the CLI sends files in an
@@ -499,7 +499,7 @@ while reassembling results, then stops the GPU before local test evaluation.
 The version-four experiment uses the final version-three adapter as a warm start,
 the 122,530-example training split, and a target of 15,000 batch-eight updates on
 a Tesla T4. Its console is captured in
-`training/runs/colab-270m-v4-sessions-console.log`. The job generates both validation
+`lab/runs/colab-270m-v4-sessions-console.log`. The job generates both validation
 reports before packaging results. The latest complete local backup is update
 5,000, including adapter weights, optimizer, random state, and dataset/task
 checksums. The runtime reached update 5,500 before disappearing again; its final
@@ -603,16 +603,16 @@ The first progress report confirms update 5,100: 100 new updates completed, with
 training loss 0.009 and peak MLX memory of 4.111 GB. The recovered job completed
 15,000 updates, and the result monitor verified and retained its final checkpoint.
 
-`training/kaggle_job.py` verifies the input bundle and retained weights, restores
+`lab/kaggle_job.py` verifies the input bundle and retained weights, restores
 optimizer and random state, and runs the existing MLX trainer in an isolated Python
 3.12 environment. Checkpoints are saved every 500 updates in the Kaggle outputs.
-`training/kaggle_follow.py` monitors the batch job, verifies the downloaded archive
+`lab/kaggle_follow.py` monitors the batch job, verifies the downloaded archive
 checksums and completed update count, and checks the frozen source and dataset
 before evaluating the fresh tests locally. Training stays on Kaggle.
 
 The completed run is
 <https://www.kaggle.com/code/rohithresearch/canvas-270m-v4-training>.
-Its local launch record and logs are under `training/runs/kaggle/`. Follow progress:
+Its local launch record and logs are under `lab/runs/kaggle/`. Follow progress:
 
 ```sh
 kaggle kernels status rohithresearch/canvas-270m-v4-training
@@ -627,7 +627,7 @@ uv run --project lab python lab/kaggle_follow.py \
 ```
 
 Completed reports are saved under
-`training/runs/kaggle/download/colab-270m-v4-sessions/`. The run directory retains its
+`lab/runs/kaggle/download/colab-270m-v4-sessions/`. The run directory retains its
 original Colab name for artifact compatibility. The completed model scored
 441/470 validation commands (93.8%). It correctly handled 218/219 supported
 actions and 223/251 requests requiring `no_action`. In closed-loop validation,
@@ -668,8 +668,8 @@ replaced. Using both allocated GPUs would require a distributed trainer.
 The benchmark is
 <https://www.kaggle.com/code/rohithresearch/canvas-270m-t4-throughput>.
 The downloaded results and traceback are under
-`training/runs/kaggle/throughput-download/`. Reproduce the bounded cases with
-`training/gpu_benchmark.py` through `training/kaggle_job.py --task benchmark`.
+`lab/runs/kaggle/throughput-download/`. Reproduce the bounded cases with
+`lab/gpu_benchmark.py` through `lab/kaggle_job.py --task benchmark`.
 
 Subsequent notebook versions expanded the comparison to effective batch eight,
 full-batch gradient checks, two GPUs, and an 80-update verification workload with
@@ -725,9 +725,9 @@ held-out accuracy comparison. The highest measured FP16 speed, 1.312
 updates/second in version 4, remains a candidate for a separate accuracy trial.
 No faster replacement was adopted, and the active 15,000-update job continued.
 
-The source of the PyTorch experiments is `training/torch_benchmark.py`; it is a
+The source of the PyTorch experiments is `lab/torch_benchmark.py`; it is a
 diagnostic implementation, not the production trainer. Versions 2, 3, 4, and 5 are
-retained under `training/runs/kaggle/search-download/`, `attention-download/`,
+retained under `lab/runs/kaggle/search-download/`, `attention-download/`,
 `precision-download/`, and `final-download/` respectively. The active production
 run kept its original configuration throughout.
 
@@ -743,7 +743,7 @@ examples, before measuring that representation.
 
 #### Bounded Modal H100 measurement
 
-`training/modal_benchmark.py` runs one H100 worker with the frozen version-seven
+`lab/modal_benchmark.py` runs one H100 worker with the frozen version-seven
 training contract and retained version-six warm start. It samples 64 training
 examples across eight length quantiles, including the longest batch. Development
 and test examples are excluded. Each successful stage measures 40 optimizer
@@ -758,9 +758,9 @@ before the second stage trains. Neither stage promotes an adapter or measures
 action accuracy.
 
 The preparation command requires the ignored frozen source and token cache under
-`training/runs/v7-accuracy-workflow-revised/`, the converted FP16 base under
-`training/runs/base-bb327a9a-float16/`, and the verified version-six adapter under
-`training/runs/kaggle/spoken/download/refinement/dual-window/adapter/`. It verifies
+`lab/runs/v7-accuracy-workflow-revised/`, the converted FP16 base under
+`lab/runs/base-bb327a9a-float16/`, and the verified version-six adapter under
+`lab/runs/kaggle/spoken/download/refinement/dual-window/adapter/`. It verifies
 their checksums before building the payload. The cloud image downloads the pinned
 public BF16 base on CPU and reproduces the local FP16 file exactly; CUDA headers
 are provided by the NVIDIA development image.
@@ -781,7 +781,7 @@ and stops its specific ephemeral app after completion or a 690-second active
 deadline. These deadlines and resource estimates are not an account spending
 cap; check usage before another run. The original benchmark allowance was $2
 across setup attempts and the measurement. Local reports, telemetry, launch and
-stop receipts are saved under `training/runs/quality-next/modal/`.
+stop receipts are saved under `lab/runs/quality-next/modal/`.
 
 The October 3 measurement completed 48 updates with finite losses and adapter
 weights. Its steady median was 1.477 updates/second, or 11.82 examples/second;
@@ -823,7 +823,7 @@ to about $0.63 with no cash billed. Its app is stopped.
 
 #### Bounded Modal quality training
 
-`training/prepare_modal_training.py` creates an immutable version-eight input
+`lab/prepare_modal_training.py` creates an immutable version-eight input
 using CPU tokenization. It combines the 24,000 original training rows with the
 reviewed 2,400-row quality supplement. An exact 3,900-update plan exposes each
 original row once and each supplemental row three times, for 31,200 positions at
@@ -858,7 +858,7 @@ five minutes and active work to at most 105 minutes, and monitors metered usage.
 The deadline is preserved during recovery. These controls are estimates and
 watchdogs, not an account spending cap; billing can lag. Inputs, live logs,
 verified downloads, stop receipts, and billing snapshots live under
-`training/runs/v8-quality-modal/`.
+`lab/runs/v8-quality-modal/`.
 
 Checkpoints 650, 1,950, and 3,900 first face the unchanged 256-command/six-session
 selection gate. The chosen checkpoint then faces separate full original and
@@ -941,7 +941,7 @@ These are synthetic development results, with only four short English sessions.
 They do not establish spontaneous speech or long-session reliability. The warm
 start differs from the comparison baseline, so the result does not isolate the
 effect of the new English data. Results and frozen inputs are under
-`training/runs/v9-english-modal/`. The recorded account ledger shows about $7.08
+`lab/runs/v9-english-modal/`. The recorded account ledger shows about $7.08
 total metered usage, covered by credits with zero cash billed.
 
 #### Accuracy trial for the faster trainer
@@ -982,9 +982,9 @@ remains an experimental candidate; the completed main model is retained.
 This is one paired trial from update 5,000 to 5,500, so it does not establish
 accuracy throughout a longer training run. The final test split was evaluated
 only for the completed main model. The launch record and live log are
-`training/runs/kaggle/quality-run.json` and `quality-live.log`. Downloaded adapters,
+`lab/runs/kaggle/quality-run.json` and `quality-live.log`. Downloaded adapters,
 evaluation reports, and raw telemetry are under
-`training/runs/kaggle/quality-download/`; `quality-comparison.json` was recomputed
+`lab/runs/kaggle/quality-download/`; `quality-comparison.json` was recomputed
 locally and verified against those reports.
 
 The GPU sampler recorded one reading per second. Excluding the first 50 updates,

@@ -181,13 +181,23 @@ def score_sessions(model, tokenizer, cases, guarded):
     return summary, rows
 
 
+def positive_integer(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("Expected a positive integer.")
+    return number
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
     parser.add_argument("--adapter")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--split", default="valid", choices=("valid", "test"))
-    parser.add_argument("--limit", type=int, help="score only this many commands and sessions")
+    parser.add_argument("--limit", type=positive_integer, help="score only this many commands")
+    parser.add_argument(
+        "--session-limit", type=positive_integer, help="score only this many sessions"
+    )
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -205,7 +215,9 @@ def main():
     details = {}
     for name, (subset_rows, subset_cases) in subsets.items():
         if args.limit:
-            subset_rows, subset_cases = subset_rows[: args.limit], subset_cases[:1]
+            subset_rows = subset_rows[: args.limit]
+        if args.session_limit:
+            subset_cases = subset_cases[: args.session_limit]
         start = time.time()
         commands, command_rows = score_commands(model, tokenizer, subset_rows)
         report[name] = {"commands": commands}

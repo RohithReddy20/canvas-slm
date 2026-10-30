@@ -36,7 +36,7 @@ nearly absent from the v7 training data.
 results into `runs/colab/` (not committed). The VM releases itself after the job.
 
 ```sh
-python3 slm/colab_run.py start --gpu A100 --bundle <Kaggle canvas-270m-v7-accuracy-workflow folder>
+python3 slm/colab_run.py start --gpu A100 --bundle /path/to/canvas-270m-v7-accuracy-workflow
 python3 slm/colab_run.py watch --adapters q17
 ```
 

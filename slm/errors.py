@@ -10,7 +10,9 @@ from collections import Counter
 
 def main():
     for path in sys.argv[1:]:
-        details = json.load(open(path))["valid_all"]
+        details = next(
+            value for key, value in json.load(open(path)).items() if key.endswith("_all")
+        )
         rows = details["commands"]
         wrong = [row for row in rows if not row["raw"]["correct"]]
         print(f"\n{path}: {len(wrong)}/{len(rows)} commands wrong (raw)")

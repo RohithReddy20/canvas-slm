@@ -124,6 +124,8 @@ def main():
     if args.rows:
         rows = rows[: args.rows]
     examples, dropped = encode(tokenizer, rows, args.max_length)
+    if not examples:
+        raise SystemExit(f"No training row fits within --max-length {args.max_length}.")
     lengths = sorted(sum(map(len, example)) for example in examples)
     print(
         f"{len(examples)} rows, {dropped} over {args.max_length} tokens dropped; "

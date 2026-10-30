@@ -17,7 +17,7 @@ mkdir -p "$DATA"
 echo "== smoke"
 python train.py --model Qwen/Qwen3-0.6B --data "$DATA" --output "$RUNS/smoke" --rows 320
 python evaluate.py --model Qwen/Qwen3-0.6B --adapter "$RUNS/smoke/adapter" --data "$DATA" \
-  --limit 48 --output "$RUNS/smoke/valid.json"
+  --limit 48 --session-limit 1 --output "$RUNS/smoke/valid.json"
 
 for spec in "unsloth/functiongemma-270m-it fg270m" "Qwen/Qwen3-0.6B q06" "Qwen/Qwen3-1.7B q17"; do
   set -- $spec

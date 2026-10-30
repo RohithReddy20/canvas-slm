@@ -13,6 +13,7 @@ a grace period, so it never keeps spending units unattended.
 """
 
 import argparse
+import hashlib
 import io
 import json
 import os
@@ -62,7 +63,13 @@ def remote(session, code, timeout=180):
 def download(session, path, target):
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
-    colab("download", "-s", session, path, str(partial), timeout=900, check=False)
+    # A partial left by an earlier failed transfer must not pass for a fresh copy.
+    partial.unlink(missing_ok=True)
+    try:
+        colab("download", "-s", session, path, str(partial), timeout=900)
+    except RuntimeError:
+        partial.unlink(missing_ok=True)
+        return False
     if partial.exists():
         partial.replace(target)
         return True
@@ -78,14 +85,20 @@ def source_archive():
 
 
 def data_archive(bundle):
-    target = LOCAL / "data.tar.xz"
+    files = []
+    for name in DATA_FILES:
+        found = [p for p in (bundle / name, bundle / "x" / name) if p.exists()]
+        if not found:
+            raise SystemExit(f"{name} is not in {bundle}")
+        files.append(found[0].resolve())
+    # Named by its sources, so another bundle never reuses a stale archive.
+    key = hashlib.sha256(
+        "\n".join(
+            f"{p}:{p.stat().st_size}:{p.stat().st_mtime_ns}" for p in files
+        ).encode()
+    ).hexdigest()[:16]
+    target = LOCAL / f"data-{key}.tar.xz"
     if not target.exists():
-        files = []
-        for name in DATA_FILES:
-            found = [p for p in (bundle / name, bundle / "x" / name) if p.exists()]
-            if not found:
-                raise SystemExit(f"{name} is not in {bundle}")
-            files.append(found[0])
         target.parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(target, "w:xz") as archive:
             for path in files:
@@ -103,7 +116,8 @@ def start(args):
             f"""
 import json, os, subprocess
 subprocess.run(["pkill", "-f", "unassign"], check=False)
-print({MARK!r} + json.dumps({{"data": os.path.exists("/content/data/v7/examples.jsonl")}}))
+names = {list(DATA_FILES)!r}
+print({MARK!r} + json.dumps({{"data": all(os.path.exists("/content/data/v7/" + n) for n in names)}}))
 """,
         )
     else:
@@ -139,39 +153,37 @@ with open({RUNS!r} + "/run.log", "a") as log:
     ).wait()
 """
     environment = {**os.environ, "HOME": str(COLAB_HOME), "REQUEST_TIMEOUT": "120"}
-    for _ in range(3):
-        # The CLI call holding the cell may lose its connection; the cell runs on.
-        holder = subprocess.Popen(
-            ["colab", "exec", "-s", args.session, "--timeout", str(args.deadline * 60 + 3600)],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            env=environment,
-            start_new_session=True,
-        )
-        holder.stdin.write(cell)
-        holder.stdin.close()
-        for _ in range(12):
-            time.sleep(20)
-            if download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
-                print(f"started; log at {RUNS}/run.log", flush=True)
-                return
-            if holder.poll() is not None:
-                break
-        holder.kill()
-        print("the job did not start; trying again", flush=True)
-    raise SystemExit("the job did not start")
+    # The CLI call holding the cell may lose its connection; the cell runs on.
+    holder = subprocess.Popen(
+        ["colab", "exec", "-s", args.session, "--timeout", str(args.deadline * 60 + 3600)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=environment,
+        start_new_session=True,
+    )
+    holder.stdin.write(cell)
+    holder.stdin.close()
+    # A second submission could start a duplicate job, so an unconfirmed start is reported.
+    for _ in range(24):
+        time.sleep(20)
+        if download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
+            print(f"started; log at {RUNS}/run.log", flush=True)
+            return
+        if holder.poll() not in (None, 0):
+            raise SystemExit("the job was not submitted; `start --reuse` can try again")
+    raise SystemExit("no job log after 8 minutes; check `status` before starting again")
 
 
 def status(args, lines=12):
+    """The job's end marker, "" while it runs, or None when the log cannot be read."""
     if not download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
         print("could not read the log", flush=True)
         return None
     log = (LOCAL / "run.log").read_text(errors="replace").replace("\r", "\n").splitlines()
     print("\n".join(line[:240] for line in log[-lines:]), flush=True)
-    end = next((x for x in reversed(log) if x.startswith(("== done", "== exit"))), None)
-    return end
+    return next((x for x in reversed(log) if x.startswith(("== done", "== exit"))), "")
 
 
 def collect(args):
@@ -196,8 +208,16 @@ print({MARK!r} + json.dumps({{"files": len(files), "bytes": os.path.getsize("/co
 
 
 def watch(args):
+    failures = 0
     while True:
         end = status(args, lines=3)
+        failures = failures + 1 if end is None else 0
+        listing = colab("sessions", check=False) if failures >= 5 else ""
+        if listing and args.session not in listing:
+            raise SystemExit(
+                f"session {args.session} is gone (released after its grace period?); "
+                f"results that were not collected are lost"
+            )
         if end:
             print(end, flush=True)
             collect(args)

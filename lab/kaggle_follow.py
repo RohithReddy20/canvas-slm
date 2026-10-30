@@ -582,6 +582,12 @@ def verify_native(directory):
         raise ValueError(
             "Native checks require a verified, completed workflow checkpoint."
         )
+    # The browser tests live in the tldraw fork, outside this repository.
+    checkout = Path(os.environ.get("TLDRAW_REPO", "")).expanduser().resolve()
+    if not (checkout / "templates/agent/package.json").is_file():
+        raise ValueError(
+            "Set TLDRAW_REPO to a checkout of the tldraw fork for native checks."
+        )
     output = directory / "native-check"
     output.mkdir(exist_ok=True)
     report = {
@@ -649,7 +655,7 @@ def verify_native(directory):
             with (output / "browser.log").open("w") as browser_log:
                 result = subprocess.run(
                     command,
-                    cwd=ROOT.parents[2],
+                    cwd=checkout,
                     env=environment,
                     stdout=browser_log,
                     stderr=subprocess.STDOUT,
