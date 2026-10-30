@@ -15,7 +15,7 @@ mkdir -p "$DATA"
 [ -f "$DATA/examples.jsonl" ] || tar -xJf /content/data.tar.xz -C "$DATA"
 
 echo "== smoke"
-python train.py --model Qwen/Qwen3-0.6B --data "$DATA" --output "$RUNS/smoke" --rows 320
+python train.py --model Qwen/Qwen3-0.6B --data "$DATA" --output "$RUNS/smoke" --limit-rows 320
 python evaluate.py --model Qwen/Qwen3-0.6B --adapter "$RUNS/smoke/adapter" --data "$DATA" \
   --limit 48 --session-limit 1 --output "$RUNS/smoke/valid.json"
 

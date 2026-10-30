@@ -72,7 +72,8 @@ def compact_call(call):
     return {"name": call["name"], "arguments": arguments}
 
 
-def messages(command, canvas, history=None):
+def context_and_recent(canvas, history):
+    """The compact canvas, recent outcomes, and the short IDs they use."""
     context, identifiers = model_canvas(canvas)
     context["schemas"] = [compact_object(box) for box in context["schemas"]]
     context["shapes"] = [compact_object(shape) for shape in context["shapes"]]
@@ -87,6 +88,11 @@ def messages(command, canvas, history=None):
         }
         for turn in recent["turns"]
     ]
+    return context, recent, identifiers
+
+
+def messages(command, canvas, history=None):
+    context, recent, _ = context_and_recent(canvas, history)
     return [
         {"role": "system", "content": SYSTEM},
         {

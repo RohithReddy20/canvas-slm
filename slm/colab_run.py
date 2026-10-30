@@ -1,6 +1,8 @@
 """Run job.sh on a Colab GPU VM, signed in with the account kept under COLAB_HOME.
 
-    python slm/colab_run.py start --gpu A100 --bundle <v7 Kaggle dataset folder>
+    python slm/colab_run.py start --gpu A100 --bundle /path/to/v7-kaggle-dataset
+    python slm/colab_run.py start --job mine.sh --gpu none --high-mem --session mine
+    python slm/colab_run.py start --job teach.sh --gpu G4 --session teach --input runs/colab/teach-input.jsonl
     python slm/colab_run.py status
     python slm/colab_run.py watch      # waits for the end, collects results, stops the VM
     python slm/colab_run.py collect [--adapters q17 ...]
@@ -20,6 +22,7 @@ import os
 import subprocess
 import tarfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -62,7 +65,8 @@ def remote(session, code, timeout=180):
 
 def download(session, path, target):
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(target.name + ".part")
+    # One partial file per process, so concurrent readers of the same log cannot collide.
+    partial = target.with_name(f"{target.name}.{os.getpid()}.part")
     # A partial left by an earlier failed transfer must not pass for a fresh copy.
     partial.unlink(missing_ok=True)
     try:
@@ -106,9 +110,61 @@ def data_archive(bundle):
     return target
 
 
+def upload_input(session, path, part=16 * 1024 * 1024):
+    """A file or folder at /content/input/<name>; folders go as a tarball, and large files
+    in parts joined on the VM, since one large upload through the notebook API can fail."""
+    name = path.name
+    if path.is_dir():
+        packed = LOCAL / f"{name}.tar"
+        with tarfile.open(packed, "w") as archive:
+            archive.add(path, arcname=name)
+        path = packed
+    data = path.read_bytes()
+    pieces = [data[i : i + part] for i in range(0, len(data), part)] or [b""]
+
+    def send(index):
+        # Each upload connection through the notebook proxy is slow and sometimes drops,
+        # so parts go in parallel and are retried.
+        chunk = LOCAL / f"{path.name}.{index:03d}"
+        chunk.write_bytes(pieces[index])
+        try:
+            for attempt in range(4):
+                try:
+                    return colab("upload", "-s", session, str(chunk),
+                                 f"/content/input/{path.name}.{index:03d}", timeout=1800)
+                except RuntimeError:
+                    if attempt == 3:
+                        raise
+        finally:
+            chunk.unlink()
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(send, range(len(pieces))))
+    print(
+        remote(
+            session,
+            f"""
+import glob, json, os, tarfile
+target = "/content/input/{path.name}"
+parts = sorted(glob.glob(target + ".[0-9][0-9][0-9]"))
+with open(target, "wb") as joined:
+    for part in parts:
+        joined.write(open(part, "rb").read())
+        os.remove(part)
+if target.endswith(".tar"):
+    with tarfile.open(target) as archive:
+        archive.extractall("/content/input", filter="data")
+    os.remove(target)
+print({MARK!r} + json.dumps({{"input": {name!r}, "parts": len(parts)}}))
+""",
+            timeout=600,
+        )
+    )
+
+
 def start(args):
     print(colab("usage").strip(), flush=True)
-    data = data_archive(args.bundle)
+    data = data_archive(args.bundle) if args.bundle else None
     if args.reuse:
         # A finished job leaves a timer that releases the VM; it is stopped first.
         state = remote(
@@ -121,12 +177,14 @@ print({MARK!r} + json.dumps({{"data": all(os.path.exists("/content/data/v7/" + n
 """,
         )
     else:
-        print(colab("new", "-s", args.session, "--gpu", args.gpu, timeout=1200).strip())
+        shape = [] if args.gpu == "none" else ["--gpu", args.gpu]
+        shape += ["--high-mem"] if args.high_mem else []
+        print(colab("new", "-s", args.session, *shape, timeout=1200).strip())
         state = {"data": False}
     source = LOCAL / "source.tar.gz"
     source.write_bytes(source_archive())
     colab("upload", "-s", args.session, str(source), "/content/source.tar.gz", timeout=600)
-    if not state["data"]:
+    if data and not state["data"]:
         colab("upload", "-s", args.session, str(data), "/content/data.tar.xz", timeout=1800)
     print(
         remote(
@@ -137,19 +195,23 @@ os.makedirs({RUNS!r}, exist_ok=True)
 if os.path.exists({RUNS!r} + "/run.log"):
     os.rename({RUNS!r} + "/run.log", {RUNS!r} + f"/run-{{int(time.time())}}.log")
 os.makedirs({REMOTE!r}, exist_ok=True)
+os.makedirs("/content/input", exist_ok=True)
 with tarfile.open("/content/source.tar.gz") as archive:
     archive.extractall({REMOTE!r}, filter="data")
 print({MARK!r} + json.dumps({{"files": sorted(os.listdir({REMOTE!r}))}}))
 """,
         )
     )
+    for path in args.input:
+        upload_input(args.session, path)
     cell = f"""
 import os, subprocess
 with open({RUNS!r} + "/run.log", "a") as log:
     subprocess.Popen(
         ["bash", {REMOTE + "/run.sh"!r}], stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True,
-        env={{**os.environ, "DEADLINE_MINUTES": "{args.deadline}", "PYTHONUNBUFFERED": "1"}},
+        env={{**os.environ, "DEADLINE_MINUTES": "{args.deadline}", "JOB": {args.job!r},
+             "PYTHONUNBUFFERED": "1"}},
     ).wait()
 """
     environment = {**os.environ, "HOME": str(COLAB_HOME), "REQUEST_TIMEOUT": "120"}
@@ -168,7 +230,7 @@ with open({RUNS!r} + "/run.log", "a") as log:
     # A second submission could start a duplicate job, so an unconfirmed start is reported.
     for _ in range(24):
         time.sleep(20)
-        if download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
+        if download(args.session, f"{RUNS}/run.log", LOCAL / args.session / "run.log"):
             print(f"started; log at {RUNS}/run.log", flush=True)
             return
         if holder.poll() not in (None, 0):
@@ -178,10 +240,11 @@ with open({RUNS!r} + "/run.log", "a") as log:
 
 def status(args, lines=12):
     """The job's end marker, "" while it runs, or None when the log cannot be read."""
-    if not download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
+    path = LOCAL / args.session / "run.log"
+    if not download(args.session, f"{RUNS}/run.log", path):
         print("could not read the log", flush=True)
         return None
-    log = (LOCAL / "run.log").read_text(errors="replace").replace("\r", "\n").splitlines()
+    log = path.read_text(errors="replace").replace("\r", "\n").splitlines()
     print("\n".join(line[:240] for line in log[-lines:]), flush=True)
     return next((x for x in reversed(log) if x.startswith(("== done", "== exit"))), "")
 
@@ -193,18 +256,21 @@ def collect(args):
         f"""
 import glob, json, os, subprocess
 os.chdir({RUNS!r})
-files = [p for p in glob.glob("*.log") + glob.glob("*/*.json") if os.path.isfile(p)]
+# Only small reports and logs leave the VM; models and datasets stay there.
+patterns = ("*.log", "*/*.json", "*/*.jsonl")
+files = [p for pattern in patterns for p in glob.glob(pattern)
+         if os.path.isfile(p) and os.path.getsize(p) <= 5 * 1024 * 1024]
 subprocess.run(["tar", "-czf", "/content/results.tar.gz", *files, *{names.split()!r}], check=True)
 print({MARK!r} + json.dumps({{"files": len(files), "bytes": os.path.getsize("/content/results.tar.gz")}}))
 """,
         timeout=600,
     )
-    target = LOCAL / "results.tar.gz"
+    target = LOCAL / args.session / "results.tar.gz"
     if not download(args.session, "/content/results.tar.gz", target):
         raise SystemExit("could not download the results")
     with tarfile.open(target) as archive:
-        archive.extractall(LOCAL / "results", filter="data")
-    print(f"results in {LOCAL / 'results'}", flush=True)
+        archive.extractall(LOCAL / args.session / "results", filter="data")
+    print(f"results in {LOCAL / args.session / 'results'}", flush=True)
 
 
 def watch(args):
@@ -213,7 +279,7 @@ def watch(args):
         end = status(args, lines=3)
         failures = failures + 1 if end is None else 0
         listing = colab("sessions", check=False) if failures >= 5 else ""
-        if listing and args.session not in listing:
+        if "No active sessions" in listing:
             raise SystemExit(
                 f"session {args.session} is gone (released after its grace period?); "
                 f"results that were not collected are lost"
@@ -231,16 +297,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("command", choices=("start", "status", "watch", "collect", "stop"))
     parser.add_argument("--session", default="canvas-slm")
-    parser.add_argument("--gpu", default="A100")
+    parser.add_argument("--gpu", default="A100", help="T4, L4, G4, A100 or none for a CPU VM")
+    parser.add_argument("--high-mem", action="store_true")
+    parser.add_argument("--job", default="job.sh", help="script in slm/ that run.sh runs")
     parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--input", type=Path, nargs="*", default=[], help="files for /content/input")
     parser.add_argument("--deadline", type=int, default=300, help="minutes")
     parser.add_argument("--every", type=float, default=5, help="minutes between log reads")
     parser.add_argument("--adapters", nargs="*", default=[])
     parser.add_argument("--reuse", action="store_true", help="start on the session's VM")
     args = parser.parse_args()
     if args.command == "start":
-        if args.bundle is None:
-            raise SystemExit("start needs --bundle")
+        if args.bundle is None and args.job == "job.sh":
+            raise SystemExit("job.sh needs --bundle")
         start(args)
     elif args.command == "status":
         status(args, lines=30)
