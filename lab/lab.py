@@ -1,0 +1,908 @@
+import argparse
+import copy
+import hashlib
+import json
+import platform
+import re
+import shutil
+import statistics
+import subprocess
+import sys
+import time
+import zipfile
+from contextlib import redirect_stderr, redirect_stdout
+from datetime import UTC, datetime
+from pathlib import Path
+
+from actions import (
+    INPUT_FORMAT_VERSION,
+    SYSTEM_PROMPT,
+    TOOLS,
+    execution_guard,
+    messages_for,
+    no_action,
+    parse_call,
+)
+from dataset import (
+    DATA,
+    ROOT,
+    dataset_hash,
+    iter_examples,
+    prepare_data,
+    read_examples,
+    training_row,
+)
+
+MODEL = "mlx-community/functiongemma-270m-it-bf16"
+REVISION = "bb327a9ad61044e1496a2bee2365a6b6a6684c72"
+
+
+def model_path(dtype=None):
+    from huggingface_hub import snapshot_download
+
+    path = snapshot_download(
+        MODEL,
+        revision=REVISION,
+        allow_patterns=["*.json", "*.safetensors", "*.jinja"],
+        token=False,
+    )
+    if dtype is None or dtype == "bfloat16":
+        return path
+    if dtype != "float16":
+        raise ValueError("Supported checkpoint dtypes are bfloat16 and float16.")
+    converted = ROOT / "runs" / f"base-{REVISION[:8]}-float16"
+    if not (converted / "config.json").exists():
+        from mlx_lm.convert import convert
+
+        converted.parent.mkdir(parents=True, exist_ok=True)
+        convert(hf_path=path, mlx_path=converted, dtype="float16")
+    return str(converted)
+
+
+def load_model(adapter=None):
+    from mlx_lm import load
+
+    dtype = None
+    if adapter and (Path(adapter).parent / "config.yaml").exists():
+        import yaml
+
+        dtype = yaml.safe_load((Path(adapter).parent / "config.yaml").read_text()).get(
+            "model_dtype"
+        )
+    return load(model_path(dtype), adapter_path=str(adapter) if adapter else None)
+
+
+def inspect_data():
+    from transformers import AutoTokenizer
+
+    counts = prepare_data()
+    tokenizer = AutoTokenizer.from_pretrained(model_path())
+    lengths = check_tokenization(tokenizer, cache=True)
+    print(
+        json.dumps(
+            {
+                "splits": counts,
+                "max_tokens": max(lengths),
+                "mean_tokens": statistics.mean(lengths),
+            },
+            indent=2,
+        )
+    )
+    row = training_row(read_examples()[0])
+    print("\nFirst formatted training example:\n")
+    print(tokenizer.apply_chat_template(row["messages"], tools=TOOLS, tokenize=False))
+
+
+def check_tokenization(tokenizer, max_length=None, *, cache=False):
+    import tempfile
+    from contextlib import ExitStack
+
+    import numpy as np
+
+    lengths = []
+    offsets = {split: [] for split in ("train", "valid", "test")}
+    sizes = {split: [] for split in offsets}
+    max_completion = 0
+    encoder = ToolPrefixEncoder(tokenizer)
+    with ExitStack() as resources:
+        if cache:
+            DATA.mkdir(exist_ok=True)
+            directory = Path(
+                resources.enter_context(tempfile.TemporaryDirectory(dir=DATA))
+            )
+            streams = {
+                split: resources.enter_context((directory / split).open("wb"))
+                for split in offsets
+            }
+        for index, example in enumerate(iter_examples()):
+            row = training_row(example)
+            full = encoder.encode(row["messages"])
+            prompt = encoder.encode(row["messages"][:-1], generation=True)
+            if index < len(TOOLS):
+                for messages, tokens, generation in (
+                    (row["messages"], full, False),
+                    (row["messages"][:-1], prompt, True),
+                ):
+                    reference = tokenizer.apply_chat_template(
+                        messages,
+                        tools=TOOLS,
+                        add_generation_prompt=generation,
+                        return_dict=False,
+                    )
+                    if tokens != reference:
+                        raise ValueError(
+                            "Cached tool prefix changes the training tokens."
+                        )
+            if full[: len(prompt)] != prompt:
+                raise ValueError(f"Prompt masking mismatch: {example['id']}")
+            completion = tokenizer.decode(full[len(prompt) :])
+            if parse_call(completion, example["canvas"]) != example["expected"]:
+                raise ValueError(f"Function-call round trip failed: {example['id']}")
+            if max_length is not None and len(full) > max_length:
+                raise ValueError(
+                    f"{example['id']} exceeds the sequence limit; "
+                    "increase max_seq_length."
+                )
+            lengths.append(len(full))
+            max_completion = max(max_completion, len(full) - len(prompt))
+            if cache:
+                split = example["split"]
+                streams[split].write(np.asarray(full, dtype=np.int32).tobytes())
+                sizes[split].append(len(full))
+                offsets[split].append(len(prompt))
+            if cache and (index + 1) % 20000 == 0:
+                print(f"Validated and tokenized {index + 1} examples.", flush=True)
+        if cache:
+            files = {}
+            for split, stream in streams.items():
+                stream.flush()
+                output = DATA / f"tokens-{split}.npz"
+                tokens = np.memmap(directory / split, dtype=np.int32, mode="r")
+                np.savez_compressed(
+                    output,
+                    tokens=tokens,
+                    boundaries=np.concatenate(([0], np.cumsum(sizes[split]))),
+                    offsets=np.asarray(offsets[split], dtype=np.int32),
+                )
+                del tokens
+                files[output.name] = hashlib.sha256(output.read_bytes()).hexdigest()
+            (DATA / "tokens.json").write_text(
+                json.dumps(
+                    {
+                        "dataset_sha256": dataset_hash(),
+                        "task_sha256": _task_hash(),
+                        "max_tokens": max(lengths),
+                        "max_completion_tokens": max_completion,
+                        "files": files,
+                    },
+                    indent=2,
+                )
+            )
+    return lengths
+
+
+class ToolPrefixEncoder:
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.prefix = None
+
+    def encode(self, messages, *, generation=False):
+        if self.prefix is None:
+            rendered = self.tokenizer.apply_chat_template(
+                messages, tools=TOOLS, tokenize=False, add_generation_prompt=generation
+            )
+            prefix = rendered.split("<start_of_turn>user\n", 1)[0]
+            self.prefix = self.tokenizer.encode(prefix, add_special_tokens=False)
+        body = self.tokenizer.apply_chat_template(
+            messages[1:], tokenize=False, add_generation_prompt=generation
+        ).removeprefix(self.tokenizer.bos_token)
+        # The special turn token prevents subword merges across the cached boundary.
+        return self.prefix + self.tokenizer.encode(body, add_special_tokens=False)
+
+
+class PromptPrefixCache:
+    def __init__(self, model, tokenizer):
+        self.model, self.tokenizer = model, tokenizer
+        encoder = ToolPrefixEncoder(tokenizer)
+        encoder.encode(messages_for("", {}), generation=True)
+        # Keep the original 2,048-token prefill boundaries to preserve GPU arithmetic.
+        self.tokens = encoder.prefix[: len(encoder.prefix) // 2048 * 2048]
+        self.cache = None
+
+    def prepare(self, model, tokenizer, prompt):
+        import mlx.core as mx
+        from mlx_lm.models.cache import make_prompt_cache
+
+        if model is not self.model or tokenizer is not self.tokenizer:
+            raise ValueError(
+                "The prefix cache belongs to a different model or tokenizer."
+            )
+        tokens = tokenizer.encode(
+            prompt,
+            add_special_tokens=tokenizer.bos_token is None
+            or not prompt.startswith(tokenizer.bos_token),
+        )
+        if tokens[: len(self.tokens)] != self.tokens:
+            raise ValueError("The prompt differs from the retained tool prefix.")
+        if not self.tokens:
+            return tokens, None
+        if self.cache is None:
+            self.cache = make_prompt_cache(model)
+            for start in range(0, len(self.tokens), 2048):
+                model(
+                    mx.array(self.tokens[start : start + 2048])[None], cache=self.cache
+                )
+                mx.eval([item.state for item in self.cache])
+        return tokens[len(self.tokens) :], copy.deepcopy(self.cache)
+
+
+def _task_hash():
+    return hashlib.sha256(
+        json.dumps(
+            [INPUT_FORMAT_VERSION, SYSTEM_PROMPT, TOOLS], sort_keys=True
+        ).encode()
+    ).hexdigest()
+
+
+def verify_token_cache(config):
+    manifest = DATA / "tokens.json"
+    if not manifest.exists():
+        return False
+    saved = json.loads(manifest.read_text())
+    if (
+        saved["dataset_sha256"] != dataset_hash()
+        or saved["task_sha256"] != _task_hash()
+    ):
+        return False
+    if (
+        saved["max_tokens"] > config["max_seq_length"]
+        or saved["max_completion_tokens"] > config["completion_window"]
+    ):
+        raise ValueError(
+            "Validated token cache exceeds the configured sequence or completion limit."
+        )
+    for name, digest in saved["files"].items():
+        if hashlib.sha256((DATA / name).read_bytes()).hexdigest() != digest:
+            raise ValueError(f"Token cache checksum mismatch: {name}")
+    return True
+
+
+def train_model(args, *, in_process=False):
+    import yaml
+    from transformers import AutoTokenizer
+
+    prepare_data()
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]*", args.run):
+        raise ValueError(
+            "Run names can contain letters, digits, underscores and hyphens."
+        )
+    run = ROOT / "runs" / args.run
+    adapter = run / "adapter"
+    if run.exists():
+        raise ValueError("This run already exists. Choose a new --run name.")
+    config = yaml.safe_load(args.config.read_text())
+    config.update(
+        {
+            "model": model_path(config.get("model_dtype")),
+            "data": str(DATA),
+            "adapter_path": str(adapter),
+        }
+    )
+    if args.iters is not None:
+        config["iters"] = args.iters
+    tokenizer = AutoTokenizer.from_pretrained(config["model"])
+    if config.get("loss_mode") == "completion_tokens_v1" and verify_token_cache(config):
+        print(
+            "Using the validated token cache; dataset and task checksums match.",
+            flush=True,
+        )
+    else:
+        check_tokenization(tokenizer, config["max_seq_length"], cache=True)
+    run.mkdir(parents=True, exist_ok=True)
+    from mlx_lm.lora import CONFIG_DEFAULTS
+
+    metadata = _metadata()
+    if config.get("resume_adapter_file"):
+        metadata["warm_start_sha256"] = hashlib.sha256(
+            Path(config["resume_adapter_file"]).read_bytes()
+        ).hexdigest()
+    (run / "examples.jsonl").write_bytes((ROOT / "examples.jsonl").read_bytes())
+    (run / "task.json").write_text(
+        json.dumps([INPUT_FORMAT_VERSION, SYSTEM_PROMPT, TOOLS], indent=2)
+    )
+    shutil.copytree(DATA, run / "data")
+    if (ROOT / "sessions.jsonl").exists():
+        shutil.copyfile(ROOT / "sessions.jsonl", run / "sessions.jsonl")
+    config["data"] = str(run / "data")
+    (run / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
+    settings = {**CONFIG_DEFAULTS, **config}
+    start = time.perf_counter()
+    with (run / "training.log").open("w") as log:
+        if in_process or config.get("loss_mode") == "completion_tokens_v1":
+            if config.get("loss_mode") == "completion_tokens_v1":
+                from training import run_training
+
+                def tune(args):
+                    run_training(vars(args))
+            else:
+                from mlx_lm.lora import run as tune
+
+            with (
+                redirect_stdout(_TrainingOutput(sys.stdout, log)),
+                redirect_stderr(_TrainingOutput(sys.stderr, log)),
+            ):
+                tune(argparse.Namespace(**settings))
+        else:
+            _run_training_process(run / "config.yaml", log)
+    metadata.update(
+        {"training_seconds": time.perf_counter() - start, "configuration": settings}
+    )
+    (run / "training.json").write_text(json.dumps(metadata, indent=2))
+    print(f"Saved adapter and training log to {run}")
+
+
+class _TrainingOutput:
+    def __init__(self, console, log):
+        self.console = console
+        self.log = log
+
+    def write(self, value):
+        self.console.write(value)
+        self.log.write(value)
+        self.flush()
+        return len(value)
+
+    def flush(self):
+        self.console.flush()
+        self.log.flush()
+
+
+def _run_training_process(config_path, log):
+    process = subprocess.Popen(
+        [sys.executable, "-m", "mlx_lm", "lora", "--config", str(config_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+    try:
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            log.write(line)
+            log.flush()
+        if process.wait():
+            raise RuntimeError(f"Training failed; see {log.name}")
+    except BaseException:
+        process.terminate()
+        process.wait()
+        raise
+
+
+def _metadata():
+    from importlib.metadata import version
+
+    return {
+        "model": MODEL,
+        "revision": REVISION,
+        "mlx_lm_version": version("mlx-lm"),
+        "mlx_version": version("mlx"),
+        "python": platform.python_version(),
+        "machine": platform.machine(),
+        "created_at": datetime.now(UTC).isoformat(),
+        "dataset_sha256": dataset_hash(),
+        "task_sha256": _task_hash(),
+    }
+
+
+def bundle_colab(resume=None, *, warm_start=None):
+    if resume is not None and warm_start is not None:
+        raise ValueError("Choose an exact resume or a new run from adapter weights.")
+    prepare_data(write_rows=False)
+    output = ROOT / "runs" / "canvas-training.zip"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    files = [
+        *ROOT.glob("*.py"),
+        ROOT / "examples.jsonl",
+        ROOT / "config.yaml",
+        ROOT / "sessions.jsonl",
+        *DATA.glob("tokens-*.npz"),
+        DATA / "tokens.json",
+    ]
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in files:
+            archive.write(path, path.relative_to(ROOT))
+        weights = warm_start or (
+            resume / "adapter" / "adapters.safetensors"
+            if resume
+            else ROOT
+            / "runs"
+            / "colab-270m-v3-stable"
+            / "adapter"
+            / "adapters.safetensors"
+        )
+        archive.write(weights, "warm-start.safetensors")
+        if warm_start:
+            archive.write(
+                weights.parent / "adapter_config.json", "warm-adapter-config.json"
+            )
+            archive.writestr(
+                "warm-start.json",
+                json.dumps(
+                    {
+                        "initialization": "weights_only",
+                        "adapter_sha256": hashlib.sha256(
+                            weights.read_bytes()
+                        ).hexdigest(),
+                    }
+                ),
+            )
+        if resume:
+            checkpoint = json.loads((resume / "checkpoint.json").read_text())
+            if (
+                hashlib.sha256(weights.read_bytes()).hexdigest()
+                != checkpoint["adapter_sha256"]
+            ):
+                raise ValueError(
+                    "Resume adapter does not match its checkpoint checksum."
+                )
+            archive.writestr("resume.json", json.dumps(checkpoint))
+            for name in (
+                "optimizer.safetensors",
+                "random.safetensors",
+                "progress.json",
+            ):
+                path = resume / "adapter" / name
+                if path.exists():
+                    archive.write(path, f"resume/{name}")
+    for path in output.parent.glob(f"{output.name}.part-*"):
+        path.unlink()
+    with output.open("rb") as source:
+        index = 0
+        while chunk := source.read(16 * 1024 * 1024):
+            output.with_name(f"{output.name}.part-{index:03d}").write_bytes(chunk)
+            index += 1
+    print(f"Saved frozen training bundle to {output}")
+
+
+def predict(
+    model,
+    tokenizer,
+    command,
+    canvas,
+    max_tokens=256,
+    history=None,
+    *,
+    guarded=False,
+    prefix_cache=None,
+):
+    import mlx.core as mx
+    from mlx_lm import stream_generate
+    from mlx_lm.sample_utils import make_sampler
+
+    prompt = tokenizer.apply_chat_template(
+        messages_for(command, canvas, history),
+        tools=TOOLS,
+        add_generation_prompt=True,
+        tokenize=False,
+    )
+    mx.reset_peak_memory()
+    start = time.perf_counter()
+    generation_options = {}
+    if prefix_cache is not None:
+        prompt, generation_options["prompt_cache"] = prefix_cache.prepare(
+            model, tokenizer, prompt
+        )
+    chunks = []
+    first_token = None
+    for response in stream_generate(
+        model,
+        tokenizer,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        sampler=make_sampler(temp=0),
+        **generation_options,
+    ):
+        if first_token is None:
+            first_token = time.perf_counter() - start
+        chunks.append(response.text)
+        if "<end_function_call>" in response.text or "<end_function_call>" in "".join(
+            chunks
+        ):
+            break
+    text = "".join(chunks)
+    result = {
+        "raw_output": text,
+        "seconds": time.perf_counter() - start,
+        "first_token_seconds": first_token,
+        "peak_model_memory_gb": mx.get_peak_memory() / 1e9,
+    }
+    return _validate_prediction(result, command, canvas, history, guarded)
+
+
+def _validate_prediction(result, command, canvas, history, guarded):
+    try:
+        result["prediction"] = parse_call(result["raw_output"], canvas)
+        result["error"] = None
+    except ValueError as error:
+        result["prediction"] = None
+        result["error"] = str(error)
+    if guarded:
+        result["raw_prediction"] = result["prediction"]
+        result["raw_error"] = result["error"]
+        if result["error"] in (
+            "Cannot remove a property that does not exist.",
+            "Cannot remove a method that does not exist.",
+            "No canvas history is available for that operation.",
+        ):
+            result["prediction"] = no_action("missing_target")
+            result["error"] = None
+        if result["prediction"] is not None:
+            result["prediction"] = execution_guard(
+                command, result["prediction"], canvas, history or {}
+            )
+    return result
+
+
+def predict_batch(
+    model, tokenizer, examples, max_tokens=256, *, guarded=False, prefix_cache=None
+):
+    import mlx.core as mx
+    from mlx_lm.generate import BatchGenerator
+    from mlx_lm.sample_utils import make_sampler
+
+    if not examples:
+        return []
+    mx.reset_peak_memory()
+    start = time.perf_counter()
+    prompts, caches = [], []
+    for example in examples:
+        prompt = tokenizer.apply_chat_template(
+            messages_for(example["command"], example["canvas"], example.get("history")),
+            tools=TOOLS,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        if prefix_cache is None:
+            tokens = tokenizer.encode(
+                prompt,
+                add_special_tokens=tokenizer.bos_token is None
+                or not prompt.startswith(tokenizer.bos_token),
+            )
+            cache = None
+        else:
+            tokens, cache = prefix_cache.prepare(model, tokenizer, prompt)
+        prompts.append(tokens)
+        caches.append(cache)
+    eos = set(tokenizer.eos_token_ids)
+    generator = BatchGenerator(
+        model,
+        max_tokens=max_tokens,
+        stop_tokens=[
+            *[[token] for token in eos],
+            tokenizer.encode("<end_function_call>", add_special_tokens=False),
+        ],
+        sampler=make_sampler(temp=0),
+        completion_batch_size=len(examples),
+        prefill_batch_size=len(examples),
+    )
+    try:
+        uids = generator.insert(prompts, caches=caches)
+        output = {uid: [] for uid in uids}
+        timing = {uid: {} for uid in uids}
+        while responses := generator.next_generated():
+            elapsed = time.perf_counter() - start
+            for response in responses:
+                timing[response.uid].setdefault("first_token_seconds", elapsed)
+                if response.token not in eos:
+                    output[response.uid].append(response.token)
+                if response.finish_reason is not None:
+                    timing[response.uid]["seconds"] = elapsed
+        if any("seconds" not in timing[uid] for uid in uids):
+            raise RuntimeError("A batched command did not finish generation.")
+        return [
+            _validate_prediction(
+                {
+                    "raw_output": tokenizer.decode(output[uid]),
+                    **timing[uid],
+                    "peak_model_memory_gb": mx.get_peak_memory() / 1e9,
+                },
+                example["command"],
+                example["canvas"],
+                example.get("history"),
+                guarded,
+            )
+            for uid, example in zip(uids, examples, strict=True)
+        ]
+    finally:
+        generator.close()
+
+
+def filter_examples(examples, requested_ids):
+    if requested_ids is None:
+        return examples
+    if (
+        not isinstance(requested_ids, (list, tuple))
+        or not requested_ids
+        or any(
+            not isinstance(identifier, str) or not identifier
+            for identifier in requested_ids
+        )
+    ):
+        raise ValueError("Requested evaluation IDs must be a nonempty list.")
+    identifiers = set(requested_ids)
+    if len(identifiers) != len(requested_ids):
+        raise ValueError("Requested evaluation IDs must be unique.")
+    missing = identifiers - {example["id"] for example in examples}
+    if missing:
+        raise ValueError(f"Requested evaluation IDs are absent: {sorted(missing)}")
+    return [example for example in examples if example["id"] in identifiers]
+
+
+def evaluate(args):
+    prepare_data(write_rows=False)
+    examples = filter_examples(
+        [e for e in read_examples() if e["split"] == args.split],
+        getattr(args, "example_ids", None),
+    )
+    if args.limit:
+        examples = examples[: args.limit]
+    batch_size = getattr(args, "batch_size", 1)
+    if batch_size < 1:
+        raise ValueError("Evaluation batch size must be positive.")
+    model, tokenizer = load_model(args.adapter)
+    prefix_cache = (
+        PromptPrefixCache(model, tokenizer)
+        if getattr(args, "cache_prefix", False)
+        else None
+    )
+    rows = []
+    start = time.perf_counter()
+    for offset in range(0, len(examples), batch_size):
+        batch = examples[offset : offset + batch_size]
+        options = {
+            "guarded": getattr(args, "guarded", False),
+            "prefix_cache": prefix_cache,
+        }
+        results = (
+            predict_batch(model, tokenizer, batch, **options)
+            if batch_size > 1
+            else [
+                predict(
+                    model,
+                    tokenizer,
+                    batch[0]["command"],
+                    batch[0]["canvas"],
+                    history=batch[0].get("history"),
+                    **options,
+                )
+            ]
+        )
+        for example, result in zip(batch, results, strict=True):
+            result.update(
+                {
+                    "id": example["id"],
+                    "command": example["command"],
+                    "expected": example["expected"],
+                }
+            )
+            result["correct"] = result["prediction"] == result["expected"]
+            rows.append(result)
+            status = "correct" if result["correct"] else "incorrect"
+            print(f"{len(rows)}/{len(examples)} {example['id']}: {status}", flush=True)
+    elapsed = time.perf_counter() - start
+    report = _summarize(rows)
+    report.update(
+        {
+            **_metadata(),
+            "split": args.split,
+            "adapter": str(args.adapter) if args.adapter else None,
+            "examples": rows,
+            "evaluation_max_tokens": 256,
+            "execution_guards": getattr(args, "guarded", False),
+            "cached_prompt_tokens": len(prefix_cache.tokens) if prefix_cache else 0,
+            "batch_size": batch_size,
+            "elapsed_seconds": elapsed,
+            "examples_per_second": len(rows) / elapsed,
+        }
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2))
+    print(json.dumps({k: v for k, v in report.items() if k != "examples"}, indent=2))
+
+
+def evaluate_sessions(args):
+    from sessions import (
+        SIMULATOR_VERSION,
+        CanvasSession,
+        compare_session_state,
+        summarize_sessions,
+    )
+
+    cases = filter_examples(
+        [s for s in read_examples(ROOT / "sessions.jsonl") if s["split"] == args.split],
+        getattr(args, "session_ids", None),
+    )
+    if args.limit:
+        cases = cases[: args.limit]
+    model, tokenizer = load_model(args.adapter)
+    prefix_cache = (
+        PromptPrefixCache(model, tokenizer)
+        if getattr(args, "cache_prefix", False)
+        else None
+    )
+    rows = []
+    for case in cases:
+        actual, oracle = (
+            CanvasSession(case["initial_canvas"]),
+            CanvasSession(case["initial_canvas"]),
+        )
+        for turn, step in enumerate(case["turns"]):
+            actual.external(step["before"])
+            oracle.external(step["before"])
+            before = actual.snapshot()
+            result = predict(
+                model,
+                tokenizer,
+                step["command"],
+                actual.canvas,
+                history=actual.history,
+                guarded=getattr(args, "guarded", False),
+                prefix_cache=prefix_cache,
+            )
+            created_id = f"{case['id']}:created-{turn}"
+            try:
+                actual.execute(step["command"], result["prediction"], created_id)
+            except ValueError as error:
+                result.update(prediction=None, error=str(error))
+                actual.execute(step["command"], None, created_id)
+            oracle.execute(step["command"], step["expected"], created_id)
+            actual_state, oracle_state = actual.snapshot(), oracle.snapshot()
+            result.update(
+                id=step["id"],
+                session_id=case["id"],
+                turn=turn,
+                command=step["command"],
+                expected=step["expected"],
+                correct=result["prediction"] == step["expected"],
+                mutated=before != actual_state,
+                **compare_session_state(actual_state, oracle_state),
+            )
+            rows.append(result)
+        correct = sum(r["correct"] for r in rows[-len(case["turns"]) :])
+        print(f"{case['id']}: {correct}/{len(case['turns'])} turns", flush=True)
+    report = {
+        **_metadata(),
+        **summarize_sessions(rows),
+        "split": args.split,
+        "adapter": str(args.adapter),
+        "mode": "closed_loop_predicted_state",
+        "simulator_version": SIMULATOR_VERSION,
+        "execution_guards": getattr(args, "guarded", False),
+        "cached_prompt_tokens": len(prefix_cache.tokens) if prefix_cache else 0,
+        "examples": rows,
+    }
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, indent=2))
+    print(json.dumps({k: v for k, v in report.items() if k != "examples"}, indent=2))
+
+
+def _summarize(rows):
+    valid = [r for r in rows if r["prediction"] is not None]
+    selections = [
+        re.match(r"\s*<start_function_call>call:(\w+)", r["raw_output"]) for r in rows
+    ]
+    per_action = {}
+    for name in sorted({r["expected"]["name"] for r in rows}):
+        subset = [r for r in rows if r["expected"]["name"] == name]
+        per_action[name] = {
+            "correct": sum(r["correct"] for r in subset),
+            "total": len(subset),
+        }
+    return {
+        "total": len(rows),
+        "correct": sum(r["correct"] for r in rows),
+        "exact_action_accuracy": sum(r["correct"] for r in rows) / len(rows),
+        "valid_call_rate": len(valid) / len(rows),
+        "tool_selection_accuracy": sum(
+            selection is not None and selection[1] == row["expected"]["name"]
+            for row, selection in zip(rows, selections, strict=True)
+        )
+        / len(rows),
+        "median_seconds": statistics.median(r["seconds"] for r in rows),
+        "max_peak_model_memory_gb": max(r["peak_model_memory_gb"] for r in rows),
+        "per_action": per_action,
+    }
+
+
+def compare(args):
+    before, after = [json.loads(path.read_text()) for path in (args.before, args.after)]
+    before_examples, after_examples = before["examples"], after["examples"]
+    if [(e["id"], e["command"], e["expected"]) for e in before_examples] != [
+        (e["id"], e["command"], e["expected"]) for e in after_examples
+    ]:
+        raise ValueError("Reports must evaluate the same examples in the same order.")
+    if (before["model"], before["revision"]) != (after["model"], after["revision"]):
+        raise ValueError("Reports must use the same base model revision.")
+    if before["dataset_sha256"] != after["dataset_sha256"]:
+        raise ValueError("Reports must use the same dataset version.")
+    if before["task_sha256"] != after["task_sha256"]:
+        raise ValueError("Reports must use the same prompt and action definitions.")
+    print("Metric                    Baseline     Adapter")
+    for key in (
+        "exact_action_accuracy",
+        "valid_call_rate",
+        "tool_selection_accuracy",
+        "median_seconds",
+        "max_peak_model_memory_gb",
+    ):
+        print(f"{key:27} {before[key]:8.3f} {after[key]:11.3f}")
+
+
+def positive_integer(value):
+    number = int(value)
+    if number < 1:
+        raise argparse.ArgumentTypeError("Expected a positive integer.")
+    return number
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Train and evaluate a local canvas action model."
+    )
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("prepare")
+    commands.add_parser("inspect")
+    bundle = commands.add_parser("bundle-colab")
+    bundle.add_argument("--resume", type=Path)
+    bundle.add_argument("--warm-start", type=Path)
+    train = commands.add_parser("train")
+    train.add_argument("--run", default="first-lora")
+    train.add_argument("--config", type=Path, default=ROOT / "config.yaml")
+    train.add_argument("--iters", type=positive_integer)
+    evaluation = commands.add_parser("evaluate")
+    evaluation.add_argument("--adapter", type=Path)
+    evaluation.add_argument("--split", choices=["valid", "test"], default="test")
+    evaluation.add_argument("--limit", type=positive_integer)
+    evaluation.add_argument("--output", type=Path, required=True)
+    evaluation.add_argument("--guarded", action="store_true")
+    evaluation.add_argument("--cache-prefix", action="store_true")
+    evaluation.add_argument("--batch-size", type=positive_integer, default=1)
+    session_evaluation = commands.add_parser("evaluate-sessions")
+    session_evaluation.add_argument("--adapter", type=Path, required=True)
+    session_evaluation.add_argument(
+        "--split", choices=["valid", "test"], default="valid"
+    )
+    session_evaluation.add_argument("--limit", type=positive_integer)
+    session_evaluation.add_argument("--output", type=Path, required=True)
+    session_evaluation.add_argument("--guarded", action="store_true")
+    session_evaluation.add_argument("--cache-prefix", action="store_true")
+    prediction = commands.add_parser("predict")
+    prediction.add_argument("text")
+    prediction.add_argument("--canvas", type=Path)
+    prediction.add_argument("--adapter", type=Path)
+    comparison = commands.add_parser("compare")
+    comparison.add_argument("before", type=Path)
+    comparison.add_argument("after", type=Path)
+    args = parser.parse_args()
+    if args.command == "prepare":
+        print(json.dumps(prepare_data(), indent=2))
+    elif args.command == "inspect":
+        inspect_data()
+    elif args.command == "train":
+        train_model(args)
+    elif args.command == "bundle-colab":
+        bundle_colab(args.resume, warm_start=args.warm_start)
+    elif args.command == "evaluate":
+        evaluate(args)
+    elif args.command == "evaluate-sessions":
+        evaluate_sessions(args)
+    elif args.command == "compare":
+        compare(args)
+    else:
+        canvas = json.loads(args.canvas.read_text()) if args.canvas else {}
+        model, tokenizer = load_model(args.adapter)
+        print(json.dumps(predict(model, tokenizer, args.text, canvas), indent=2))
+
+
+if __name__ == "__main__":
+    main()
