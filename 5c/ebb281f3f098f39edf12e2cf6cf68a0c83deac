@@ -1,0 +1,22 @@
+slm/scripts.sh
+  s_4d9165ed3ec1fd::t_4e690058ffba2c 39-42
+slm/colab_run.py
+  s_4d9165ed3ec1fd::t_4e690058ffba2c 259-262
+  s_4d9165ed3ec1fd::t_dc7709fcc426d5 25,113,124-127,129-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5cebb281f3f098f39edf12e2cf6cf68a0c83deac",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
