@@ -91,6 +91,20 @@ On real follow-ups the model invents tools and arguments (`add_note`, `update_di
 "ECommerce", an arrow by its label; 13 of 32 missing targets). Constrained decoding against
 the script grammar and fuzzier reference matching are the next, training-free fixes.
 
+### Constrained decoding and fuzzy names (retrained model, same data)
+
+| Variant | Dev commands | Subset | Sessions, agreement | Compounds | Real (32) |
+|---|---|---|---|---|---|
+| free decoding, exact names | 92.5% | 92.2% | 19.5% | 96.5% | 2 |
+| free, fuzzy | 92.5% | 92.2% | 19.5% | 96.5% | 3 |
+| grammar-constrained, exact | 91.3% | 91.4% | 19.5% | 96.2% | 3 |
+| grammar-constrained, fuzzy | 91.3% | 91.4% | 19.5% | 96.2% | 4 |
+
+The grammar cut invalid real scripts from 12 to 2, but valid is not correct: correct real
+edits only rose from 2 to 4, all atomic, none compound. Fuzzy names changed nothing on the
+dev sets. The gap is the training distribution (real canvases, phrasing and multi-step
+intent), not decoding.
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
@@ -99,13 +113,16 @@ the script grammar and fuzzier reference matching are the next, training-free fi
 |---|---|---|
 | SDPA, padded, checkpointing | 7,812 | 13.5 GB |
 | FlashAttention-2 varlen, packed, 24K tokens per micro-batch | 8,765 | 11.4 GB |
-| Same, 48K tokens per micro-batch (chosen) | 9,010 | 18.0 GB |
-| No checkpointing (24K or 12K tokens) | out of memory | |
+| Same, 48K tokens per micro-batch | 9,010 | 18.0 GB |
+| + Liger 0.6.4 (RMSNorm, RoPE, SwiGLU), 24K tokens | 10,080 | 10.7 GB |
+| + Liger, half the layers checkpointed, 12K tokens (chosen) | 12,069 | 22.8 GB |
+| + Liger, no checkpointing, 12K tokens | 13,618 | 38.3 GB (too close to 39.5) |
 
-About 31% of the A100's peak. Colab's default PyTorch (2.11, CUDA 13) has no prebuilt
-FlashAttention or Hub-kernel build, so `scripts.sh` trains in a PyTorch 2.8 environment.
-Liger 0.7+ needs transformers 5 and is pinned to 0.6.4; partial activation checkpointing
-(`--checkpointing 0.5`) is benchmarked from the next run on.
+The full run trained at 12,100 tokens/s, about 35% of the A100's peak and 55% faster than
+the baseline. Settings need a benchmark peak within 80% of GPU memory: the no-checkpointing
+setting ran out of memory on the full data. Colab's default PyTorch (2.11, CUDA 13) has no
+prebuilt FlashAttention or Hub-kernel build, so `scripts.sh` trains in a PyTorch 2.8
+environment; Liger 0.7+ needs transformers 5 and is pinned to 0.6.4.
 
 ## Running on Colab
 
