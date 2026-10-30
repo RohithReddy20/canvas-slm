@@ -1,0 +1,21 @@
+slm/scripts.sh
+  s_4d9165ed3ec1fd::t_eb3718502dd5e9 15
+slm/train.py
+  s_4d9165ed3ec1fd::t_17350889a477bb 35,235-240,242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2b7628032c73fc78a9aad546ec3c152fa7a8bb58",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
