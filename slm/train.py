@@ -185,6 +185,10 @@ def load_model(args, attention):
         )
     if args.checkpointing:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        # Checkpointing only a share of the layers trades part of the recompute for memory.
+        layers = model.model.layers
+        for layer in layers[round(len(layers) * args.checkpointing) :]:
+            layer.gradient_checkpointing = False
     model.config.use_cache = False
     model = get_peft_model(
         model,
@@ -239,8 +243,10 @@ def autotune(args):
         run({**best(), "attention": attention})
     run({**best(), "liger": 1})
     chosen = best()
-    for tokens in (chosen["max_tokens"], chosen["max_tokens"] // 2):
-        run({**chosen, "checkpointing": 0, "max_tokens": tokens})
+    for share in (0, 0.5):
+        for tokens in (chosen["max_tokens"], chosen["max_tokens"] // 2):
+            run({**chosen, "checkpointing": share, "max_tokens": tokens})
+    chosen = best()
     run({**chosen, "max_tokens": chosen["max_tokens"] * 2})
     return best(), results
 
@@ -260,7 +266,7 @@ def main():
     parser.add_argument("--max-length", type=int, default=6144)
     parser.add_argument("--attention", default="sdpa")
     parser.add_argument("--liger", type=int, default=0)
-    parser.add_argument("--checkpointing", type=int, default=1)
+    parser.add_argument("--checkpointing", type=float, default=1, help="share of layers")
     parser.add_argument("--autotune", action="store_true")
     parser.add_argument("--benchmark", type=int, help="time this many steps, print BENCH, exit")
     parser.add_argument("--benchmark-steps", type=int, default=8)

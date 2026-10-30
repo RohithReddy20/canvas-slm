@@ -64,7 +64,8 @@ def remote(session, code, timeout=180):
 
 def download(session, path, target):
     target.parent.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(target.name + ".part")
+    # One partial file per process, so concurrent readers of the same log cannot collide.
+    partial = target.with_name(f"{target.name}.{os.getpid()}.part")
     # A partial left by an earlier failed transfer must not pass for a fresh copy.
     partial.unlink(missing_ok=True)
     try:
@@ -223,7 +224,7 @@ def watch(args):
         end = status(args, lines=3)
         failures = failures + 1 if end is None else 0
         listing = colab("sessions", check=False) if failures >= 5 else ""
-        if listing and args.session not in listing:
+        if "No active sessions" in listing:
             raise SystemExit(
                 f"session {args.session} is gone (released after its grace period?); "
                 f"results that were not collected are lost"

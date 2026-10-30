@@ -70,6 +70,43 @@ model. `slm/convert.py` rewrites v7 labels as scripts and keeps a row only when 
 script resolves back to the original label (90% of a 2,000-row sample; missing and
 ambiguous refusals are dropped by design).
 
+### First script model (2026-10-30)
+
+Qwen3-1.7B, one LoRA pass over 31,080 script rows (22,080 converted v7 rows and 9,000
+compounds), on a Colab A100. Scored by the canvas each script leaves (`evaluate_scripts.py`):
+
+| Set | One-action Qwen3-1.7B | Script Qwen3-1.7B |
+|---|---|---|
+| All 1,700 dev commands | 75.0% (exact action) | 92.6% (same canvas) |
+| 256-command subset | 93.0% | 90.6% |
+| 8 dev sessions, state agreement | 93.4% | 23.8% |
+| 400 held-out compounds | cannot express | 95.5% |
+| 32 real follow-ups (diagram content) | cannot express most | 9.4% (3 atomic, 0 compound) |
+
+Refusals now come from the resolver, which removes the historical-refusal ceiling on the dev
+commands. The session regression is not yet explained: replaying converted gold labels
+already caps that harness at 68% agreement, since session turns lack reference metadata.
+On real follow-ups the model invents tools and arguments (`add_note`, `update_diagram`,
+`"required": true`; 12 of 32 invalid or unparsed) and names objects loosely ("Ecommerce" for
+"ECommerce", an arrow by its label; 13 of 32 missing targets). Constrained decoding against
+the script grammar and fuzzier reference matching are the next, training-free fixes.
+
+### Training speed
+
+`train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
+
+| Setting | Tokens/s | Peak memory |
+|---|---|---|
+| SDPA, padded, checkpointing | 7,812 | 13.5 GB |
+| FlashAttention-2 varlen, packed, 24K tokens per micro-batch | 8,765 | 11.4 GB |
+| Same, 48K tokens per micro-batch (chosen) | 9,010 | 18.0 GB |
+| No checkpointing (24K or 12K tokens) | out of memory | |
+
+About 31% of the A100's peak. Colab's default PyTorch (2.11, CUDA 13) has no prebuilt
+FlashAttention or Hub-kernel build, so `scripts.sh` trains in a PyTorch 2.8 environment.
+Liger 0.7+ needs transformers 5 and is pinned to 0.6.4; partial activation checkpointing
+(`--checkpointing 0.5`) is benchmarked from the next run on.
+
 ## Running on Colab
 
 `slm/colab_run.py` starts `slm/job.sh` on a Colab GPU VM, follows its log, and collects
