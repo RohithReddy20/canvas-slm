@@ -1,0 +1,25 @@
+lab/sessions.py
+  s_4d9165ed3ec1fd::t_78dd4a15dc5e3c 94-95
+lab/actions.py
+  s_4d9165ed3ec1fd::t_11410d4cffd6f4 799-804
+lab/test_workflow.py
+  s_4d9165ed3ec1fd::t_b7f78092089e8b 1865-1875
+lab/test_voice_server.py
+  s_4d9165ed3ec1fd::t_11af4810d33370 189-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "022da3529054c5785cb6e5b343bb186492feee7f",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
