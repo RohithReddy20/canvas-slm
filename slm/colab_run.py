@@ -1,6 +1,7 @@
 """Run job.sh on a Colab GPU VM, signed in with the account kept under COLAB_HOME.
 
-    python slm/colab_run.py start --gpu A100 --bundle <v7 Kaggle dataset folder>
+    python slm/colab_run.py start --gpu A100 --bundle /path/to/v7-kaggle-dataset
+    python slm/colab_run.py start --job mine.sh --gpu none --high-mem --session mine
     python slm/colab_run.py status
     python slm/colab_run.py watch      # waits for the end, collects results, stops the VM
     python slm/colab_run.py collect [--adapters q17 ...]
@@ -108,7 +109,7 @@ def data_archive(bundle):
 
 def start(args):
     print(colab("usage").strip(), flush=True)
-    data = data_archive(args.bundle)
+    data = data_archive(args.bundle) if args.bundle else None
     if args.reuse:
         # A finished job leaves a timer that releases the VM; it is stopped first.
         state = remote(
@@ -121,12 +122,14 @@ print({MARK!r} + json.dumps({{"data": all(os.path.exists("/content/data/v7/" + n
 """,
         )
     else:
-        print(colab("new", "-s", args.session, "--gpu", args.gpu, timeout=1200).strip())
+        shape = [] if args.gpu == "none" else ["--gpu", args.gpu]
+        shape += ["--high-mem"] if args.high_mem else []
+        print(colab("new", "-s", args.session, *shape, timeout=1200).strip())
         state = {"data": False}
     source = LOCAL / "source.tar.gz"
     source.write_bytes(source_archive())
     colab("upload", "-s", args.session, str(source), "/content/source.tar.gz", timeout=600)
-    if not state["data"]:
+    if data and not state["data"]:
         colab("upload", "-s", args.session, str(data), "/content/data.tar.xz", timeout=1800)
     print(
         remote(
@@ -149,7 +152,8 @@ with open({RUNS!r} + "/run.log", "a") as log:
     subprocess.Popen(
         ["bash", {REMOTE + "/run.sh"!r}], stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True,
-        env={{**os.environ, "DEADLINE_MINUTES": "{args.deadline}", "PYTHONUNBUFFERED": "1"}},
+        env={{**os.environ, "DEADLINE_MINUTES": "{args.deadline}", "JOB": {args.job!r},
+             "PYTHONUNBUFFERED": "1"}},
     ).wait()
 """
     environment = {**os.environ, "HOME": str(COLAB_HOME), "REQUEST_TIMEOUT": "120"}
@@ -168,7 +172,7 @@ with open({RUNS!r} + "/run.log", "a") as log:
     # A second submission could start a duplicate job, so an unconfirmed start is reported.
     for _ in range(24):
         time.sleep(20)
-        if download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
+        if download(args.session, f"{RUNS}/run.log", LOCAL / args.session / "run.log"):
             print(f"started; log at {RUNS}/run.log", flush=True)
             return
         if holder.poll() not in (None, 0):
@@ -178,10 +182,11 @@ with open({RUNS!r} + "/run.log", "a") as log:
 
 def status(args, lines=12):
     """The job's end marker, "" while it runs, or None when the log cannot be read."""
-    if not download(args.session, f"{RUNS}/run.log", LOCAL / "run.log"):
+    path = LOCAL / args.session / "run.log"
+    if not download(args.session, f"{RUNS}/run.log", path):
         print("could not read the log", flush=True)
         return None
-    log = (LOCAL / "run.log").read_text(errors="replace").replace("\r", "\n").splitlines()
+    log = path.read_text(errors="replace").replace("\r", "\n").splitlines()
     print("\n".join(line[:240] for line in log[-lines:]), flush=True)
     return next((x for x in reversed(log) if x.startswith(("== done", "== exit"))), "")
 
@@ -193,18 +198,19 @@ def collect(args):
         f"""
 import glob, json, os, subprocess
 os.chdir({RUNS!r})
-files = [p for p in glob.glob("*.log") + glob.glob("*/*.json") if os.path.isfile(p)]
+patterns = ("*.log", "*/*.json", "*/*.jsonl", "*/*.jsonl.gz")
+files = [p for pattern in patterns for p in glob.glob(pattern) if os.path.isfile(p)]
 subprocess.run(["tar", "-czf", "/content/results.tar.gz", *files, *{names.split()!r}], check=True)
 print({MARK!r} + json.dumps({{"files": len(files), "bytes": os.path.getsize("/content/results.tar.gz")}}))
 """,
         timeout=600,
     )
-    target = LOCAL / "results.tar.gz"
+    target = LOCAL / args.session / "results.tar.gz"
     if not download(args.session, "/content/results.tar.gz", target):
         raise SystemExit("could not download the results")
     with tarfile.open(target) as archive:
-        archive.extractall(LOCAL / "results", filter="data")
-    print(f"results in {LOCAL / 'results'}", flush=True)
+        archive.extractall(LOCAL / args.session / "results", filter="data")
+    print(f"results in {LOCAL / args.session / 'results'}", flush=True)
 
 
 def watch(args):
@@ -231,7 +237,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("command", choices=("start", "status", "watch", "collect", "stop"))
     parser.add_argument("--session", default="canvas-slm")
-    parser.add_argument("--gpu", default="A100")
+    parser.add_argument("--gpu", default="A100", help="T4, L4, G4, A100 or none for a CPU VM")
+    parser.add_argument("--high-mem", action="store_true")
+    parser.add_argument("--job", default="job.sh", help="script in slm/ that run.sh runs")
     parser.add_argument("--bundle", type=Path)
     parser.add_argument("--deadline", type=int, default=300, help="minutes")
     parser.add_argument("--every", type=float, default=5, help="minutes between log reads")
@@ -239,8 +247,8 @@ def main():
     parser.add_argument("--reuse", action="store_true", help="start on the session's VM")
     args = parser.parse_args()
     if args.command == "start":
-        if args.bundle is None:
-            raise SystemExit("start needs --bundle")
+        if args.bundle is None and args.job == "job.sh":
+            raise SystemExit("job.sh needs --bundle")
         start(args)
     elif args.command == "status":
         status(args, lines=30)
