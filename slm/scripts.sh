@@ -12,6 +12,7 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 # Colab's default PyTorch is newer than any prebuilt FlashAttention build, so training runs
 # in its own environment on PyTorch 2.8 (CUDA 12.8). Liger 0.7+ needs transformers 5.
 TRAIN=/content/train-env/bin/python
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 FLASH=https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl
 [ -x "$TRAIN" ] || uv venv -q --python 3.12 /content/train-env
 uv pip install -q --python "$TRAIN" "torch==2.8.0" --index-url https://download.pytorch.org/whl/cu128

@@ -32,6 +32,7 @@ PACKED_ATTENTION = ("kernels-community/flash-attn", "flash_attention_2")
 PEAK_FLOPS = {"H100": 989e12, "A100": 312e12, "RTX PRO 6000": 500e12, "L4": 121e12, "T4": 65e12}
 PROBE_ROWS = 48
 TOLERANCE = 0.02
+HEADROOM = 0.8
 
 
 def end_marker(tokenizer):
@@ -231,8 +232,14 @@ def autotune(args):
         print("autotune", json.dumps(result), flush=True)
         return result
 
+    # Short benchmarks understate the peak of a full run, so a setting needs headroom.
+    total_gb = float(
+        subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                       capture_output=True, text=True).stdout.split()[0]
+    ) / 1024
+
     def best():
-        valid = [r for r in results if r["valid"]]
+        valid = [r for r in results if r["valid"] and r["peak_gb"] <= HEADROOM * total_gb]
         if not valid:
             raise SystemExit("No benchmarked setting worked.")
         top = max(valid, key=lambda r: r["tokens_per_second"])
