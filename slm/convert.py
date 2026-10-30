@@ -24,6 +24,12 @@ def session_for(row):
             "last_created_id": history.get("last_created_id"),
             "last_edited_id": history.get("last_edited_id"),
         }
+    # Rows say undo or redo is available without the history behind it; a copy of the
+    # document stands in so those commands can run.
+    if session.canvas["can_undo"] and not session.undo_stack:
+        session.undo_stack.append(session.document())
+    if session.canvas["can_redo"] and not session.redo_stack:
+        session.redo_stack.append(session.document())
     return session
 
 

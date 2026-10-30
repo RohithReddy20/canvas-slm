@@ -150,7 +150,8 @@ def run_script(script, session, command, prefix="new"):
     created = {}
     try:
         for index, action in enumerate(script["actions"], 1):
-            identifier = f"{prefix}-{index}"
+            # The first created object keeps the plain prefix, as one-action sessions name it.
+            identifier = prefix if index == 1 else f"{prefix}-{index}"
             session.execute(command, resolve_action(action, session, created), identifier)
             if identifier in session.objects():
                 created[index] = identifier
@@ -241,3 +242,50 @@ def semantic_state(session):
             for link in session.connections
         ),
     }
+
+
+SYSTEM = (
+    'Turn the command into an edit script {"actions": [...]} for this canvas. Target '
+    'arguments are references: {"name": ...}, {"selected": true}, {"last": "created"} or '
+    '{"last": "edited"}, {"new": n} for the object action n creates, {"kind": ...}, '
+    '{"all": true}, or {"connection": {"from": ref, "to": ref}}. Refuse a request no action '
+    'can carry out with {"actions": [], "reason": "unsupported_request"}.'
+)
+
+
+def messages(command, session):
+    """Chat messages for a script model: the compact canvas, its links and recent outcomes."""
+    from prompt import context_and_recent, dumps
+
+    context, recent, identifiers = context_and_recent(session.canvas, session.history)
+    links = [
+        [identifiers.get(link["source_id"]), identifiers.get(link["target_id"]), link["label"]]
+        for link in session.connections
+    ]
+    return [
+        {"role": "system", "content": SYSTEM},
+        {
+            "role": "user",
+            "content": f"Canvas: {dumps(context)}\nLinks: {dumps(links)}\n"
+            f"Recent: {dumps(recent)}\nCommand: {command}",
+        },
+    ]
+
+
+def script_text(script):
+    from prompt import compact_call, dumps
+
+    if script.get("reason") is not None:
+        return dumps({"actions": [], "reason": script["reason"]})
+    return dumps({"actions": [compact_call(action) for action in script["actions"]]})
+
+
+def parse_script(text):
+    import json
+
+    from prompt import _unique_object
+
+    script = json.loads(text.strip(), object_pairs_hook=_unique_object)
+    if not isinstance(script, dict) or not isinstance(script.get("actions"), list):
+        raise ValueError("Expected a script object with an actions list.")
+    return script
