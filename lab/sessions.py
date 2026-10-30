@@ -91,6 +91,8 @@ class CanvasSession:
             if kind == "select":
                 self.canvas["selected_ids"] = [i for i in event["ids"] if i in ids]
             elif kind == "reorder":
+                # The native editor lists shapes in ID order (normalize_context), so a
+                # reorder leaves aliases and z-order unchanged; it replays older sessions.
                 order = {identifier: i for i, identifier in enumerate(event["ids"])}
                 self.canvas["schemas"].sort(key=lambda box: order.get(box["id"], 999))
                 self.canvas["shapes"].sort(key=lambda box: order.get(box["id"], 999))

@@ -796,4 +796,10 @@ def execution_guard(command, action, canvas, history):
     )
     if enforce_targets and reference_ids and set(targets) != reference_ids:
         return no_action("ambiguous_target")
+    # An unqualified name must still be what the edit targets; only other named
+    # objects and the current selection may join it.
+    if named_ids and not enforce_targets:
+        allowed = reference_ids | set(canvas.get("selected_ids", []))
+        if not named_ids & set(targets) or not set(targets) <= allowed:
+            return no_action("ambiguous_target")
     return action

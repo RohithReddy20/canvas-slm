@@ -1862,6 +1862,17 @@ class WorkflowTests(unittest.TestCase):
             )
             (root / "run.json").write_text(json.dumps(launch))
             with (
+                patch.dict("os.environ", {"TLDRAW_REPO": ""}),
+                patch("kaggle_follow.subprocess.Popen") as start,
+            ):
+                with self.assertRaisesRegex(ValueError, "TLDRAW_REPO"):
+                    verify_native(root)
+                start.assert_not_called()
+            checkout = root / "tldraw"
+            (checkout / "templates/agent").mkdir(parents=True)
+            (checkout / "templates/agent/package.json").write_text("{}")
+            with (
+                patch.dict("os.environ", {"TLDRAW_REPO": str(checkout)}),
                 patch("kaggle_follow.subprocess.Popen") as start,
                 patch("kaggle_follow.urlopen") as health,
                 patch(

@@ -186,6 +186,35 @@ class VoiceGuardTests(unittest.TestCase):
             {"name": "no_action", "arguments": {"reason": "missing_target"}},
         )
 
+    def test_unqualified_name_must_be_the_edited_target(self):
+        canvas = {
+            "schemas": [
+                {"id": "alpha", "name": "Alpha"},
+                {"id": "beta", "name": "Beta"},
+                {"id": "gamma", "name": "Gamma"},
+            ],
+            "selected_ids": ["gamma"],
+        }
+
+        def move(*ids):
+            return {
+                "name": "move_shapes",
+                "arguments": {"shape_ids": list(ids), "dx": 100.0, "dy": 0.0},
+            }
+
+        rejected = {"name": "no_action", "arguments": {"reason": "ambiguous_target"}}
+        for command, action, expected in (
+            ('Move "Alpha" right.', move("beta"), rejected),
+            ('Move "Alpha" right.', move("alpha", "beta"), rejected),
+            ('Move "Alpha" right.', move("alpha"), move("alpha")),
+            ('Move "Alpha" and "Beta" right.', move("alpha", "beta"), None),
+            ("Move Alpha and the selection right.", move("alpha", "gamma"), None),
+        ):
+            with self.subTest(command=command, action=action):
+                self.assertEqual(
+                    execution_guard(command, action, canvas, {}), expected or action
+                )
+
     def test_singular_conversational_targets_cannot_edit_multiple_selections(self):
         action = {
             "name": "delete_shapes",
