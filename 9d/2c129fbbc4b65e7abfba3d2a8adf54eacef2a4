@@ -1,0 +1,19 @@
+slm/job.sh
+  s_4d9165ed3ec1fd::t_c1982274f20b1c 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9d2c129fbbc4b65e7abfba3d2a8adf54eacef2a4",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
