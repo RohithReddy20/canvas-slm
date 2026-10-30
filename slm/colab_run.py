@@ -109,6 +109,44 @@ def data_archive(bundle):
     return target
 
 
+def upload_input(session, path, part=32 * 1024 * 1024):
+    """A file or folder at /content/input/<name>; folders go as a tarball, and large files
+    in parts joined on the VM, since one large upload through the notebook API can fail."""
+    name = path.name
+    if path.is_dir():
+        packed = LOCAL / f"{name}.tar"
+        with tarfile.open(packed, "w") as archive:
+            archive.add(path, arcname=name)
+        path = packed
+    data = path.read_bytes()
+    pieces = [data[i : i + part] for i in range(0, len(data), part)] or [b""]
+    for index, piece in enumerate(pieces):
+        chunk = LOCAL / f"{path.name}.{index:03d}"
+        chunk.write_bytes(piece)
+        colab("upload", "-s", session, str(chunk), f"/content/input/{path.name}.{index:03d}", timeout=1800)
+        chunk.unlink()
+    print(
+        remote(
+            session,
+            f"""
+import glob, json, os, tarfile
+target = "/content/input/{path.name}"
+parts = sorted(glob.glob(target + ".[0-9][0-9][0-9]"))
+with open(target, "wb") as joined:
+    for part in parts:
+        joined.write(open(part, "rb").read())
+        os.remove(part)
+if target.endswith(".tar"):
+    with tarfile.open(target) as archive:
+        archive.extractall("/content/input", filter="data")
+    os.remove(target)
+print({MARK!r} + json.dumps({{"input": {name!r}, "parts": len(parts)}}))
+""",
+            timeout=600,
+        )
+    )
+
+
 def start(args):
     print(colab("usage").strip(), flush=True)
     data = data_archive(args.bundle) if args.bundle else None
@@ -150,7 +188,7 @@ print({MARK!r} + json.dumps({{"files": sorted(os.listdir({REMOTE!r}))}}))
         )
     )
     for path in args.input:
-        colab("upload", "-s", args.session, str(path), f"/content/input/{path.name}", timeout=1800)
+        upload_input(args.session, path)
     cell = f"""
 import os, subprocess
 with open({RUNS!r} + "/run.log", "a") as log:
