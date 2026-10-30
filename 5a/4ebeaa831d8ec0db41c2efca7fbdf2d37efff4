@@ -1,0 +1,29 @@
+slm/contract.py
+  s_4d9165ed3ec1fd::t_a21e4ea178d257 9,31-32,100-102,159-163,287-288,342
+  s_4d9165ed3ec1fd::t_84fa484b9a2276 66-68
+slm/prepare_scripts.py
+  s_4d9165ed3ec1fd::t_fa4f8fff461768 7-9,14,22,26-40,52,57-60,79
+  s_4d9165ed3ec1fd::t_0c25914a306366 78
+slm/convert.py
+  s_4d9165ed3ec1fd::t_5a52f223c9819f 4-11,14,16,20,23-40,68,72,85,92-131,133-136,138-147,149-150,163
+README.md
+  s_4d9165ed3ec1fd::t_9452bfab0ca055 133-149
+  s_4d9165ed3ec1fd::t_011471d1434d8a 108-132,169-187
+  s_4d9165ed3ec1fd::t_f12f63d58e832f 188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a4ebeaa831d8ec0db41c2efca7fbdf2d37efff4",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
