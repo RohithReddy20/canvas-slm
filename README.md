@@ -105,6 +105,48 @@ edits only rose from 2 to 4, all atomic, none compound. Fuzzy names changed noth
 dev sets. The gap is the training distribution (real canvases, phrasing and multi-step
 intent), not decoding.
 
+### Why sessions regressed
+
+The script model's sessions failed early: 84.5% accuracy while its canvas still matched,
+first error at turn 7 on average, no perfect session. Every dev session contains "Move it a
+distance of 100 towards the right." with no single object selected, which v7 labels as an
+ambiguous target; those turns sit at turn 6.75 on average. Scripts had no singular
+selection reference, so the model wrote `shape_ids: [{"selected": true}]` and moved every
+selected object. The conversion had three more gaps:
+
+- all 890 missing/ambiguous refusals in the training data were dropped, because a refusal
+  label does not say which edit was meant;
+- training canvases never carried links (rows hold no connection data), while 46% of
+  session turns show some;
+- exact names skipped arrows, but v7 canvases have free-standing labelled arrows that
+  commands name by their label.
+
+Fixes: a `{"it": true}` reference (the one selected object, otherwise a refusal decided by
+the resolver); refusals rebuilt from v7's wording families (move it, delete a name, remove
+a field from the selected shape) and kept only when the resolver refuses them for the
+labelled reason (889 of 890); session-turn rows rendered on the replayed session, which
+adds links and real history to 877 training prompts; arrows matched by exact label when
+nothing else has that name. Conversion keeps 23,993 of 24,000 training rows (was about
+22,000), and replaying gold scripts through the dev sessions now expresses 254 of 256
+turns with no divergence.
+
+Retrained with these fixes on Kaggle (2×T4, FP16, 32,993 rows, 24.8M tokens, 704 steps in
+3.5 hours at 1,950 tokens/s, no overflowed steps; free):
+
+| Variant | Dev commands | Subset | Sessions, agreement | Compounds | Real (32) |
+|---|---|---|---|---|---|
+| free decoding, before the fixes | 92.5% | 92.2% | 19.5% | 96.5% | 2 |
+| free decoding | 93.2% | 92.2% | 36.7% | 96.2% | 3 |
+| grammar-constrained | 93.6% | 93.8% | 36.7% | 96.2% | 4 |
+
+Per-turn accuracy while the session canvas still matched rose from 84.5% to 93.1%, the
+first error moved from turn 7.1 to 9.9, and one session is now perfect. Six of the seven
+remaining first errors are the same held-out dev wording, "Remove all objects from the
+selection." (clear the selection): training's nearest phrase is "Remove the selection from
+the canvas." (delete), so the model deletes the selection and the session diverges from
+there. The seventh is a fill style v7 calls unsupported on that shape. Both are wording and
+rule coverage, not harness errors; real follow-ups stay at 3–4 of 32 with no compound right.
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
@@ -123,6 +165,26 @@ the baseline. Settings need a benchmark peak within 80% of GPU memory: the no-ch
 setting ran out of memory on the full data. Colab's default PyTorch (2.11, CUDA 13) has no
 prebuilt FlashAttention or Hub-kernel build, so `scripts.sh` trains in a PyTorch 2.8
 environment; Liger 0.7+ needs transformers 5 and is pinned to 0.6.4.
+
+## Running on Kaggle
+
+The Mac's Kaggle account runs jobs in private kernels on two free T4s (about 30 GPU-hours
+a week, two sessions at a time; A100 and L4 requests fall back to T4). `slm/kaggle_run.py`
+embeds `slm/` in the kernel script, mounts the v7 dataset and a small private inputs
+dataset, and leaves models in the kernel output on Kaggle, where later kernels can mount
+them. Only logs and reports come back.
+
+```sh
+python3 slm/kaggle_run.py start --name scripts3-t4 --with-inputs \
+  --env "SETTINGS=--attention sdpa --liger 1 --checkpointing 1 --max-tokens 12288"
+kaggle kernels logs -f rohithresearch/canvas-slm-scripts3-t4
+python3 slm/kaggle_run.py collect --name scripts3-t4
+```
+
+T4s have no BF16 or FlashAttention-2, so `train.py` trains in FP16 with loss scaling and,
+under torchrun, sums LoRA gradients across both GPUs. Autotune on one T4 chose Liger with
+full checkpointing at 12K tokens per micro-batch (1,250 tokens/s per GPU); dropping
+checkpointing ran out of memory. `SETTINGS` skips the 20 minutes of tuning.
 
 ## Running on Colab
 

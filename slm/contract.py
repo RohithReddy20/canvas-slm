@@ -6,6 +6,7 @@ Actions use the tools of `actions.ACTION_MODELS`, except that target arguments
 
     {"name": "User"}                 the object with that name
     {"selected": true}               the current selection
+    {"it": true}                     "it", "this", "the selected shape": the one selected object
     {"last": "created" | "edited"}   the object last created or edited
     {"new": 2}                       the object created by action 2 of this script
     {"kind": "diamond"}              every object of a kind ("schema" for boxes)
@@ -27,6 +28,8 @@ from sessions import CanvasSession, schema_height, shape_name
 SINGLE = ("schema_id", "shape_id", "source_id", "target_id")
 PLURAL = "shape_ids"
 REASONS = ("unsupported_request",)
+# Removing a member the box lacks is a missing target, as v7 labels it.
+MEMBERS = {"remove_property": ("property_name", "properties"), "remove_method": ("method_name", "methods")}
 GRID = (5, 360, 320)
 
 
@@ -60,11 +63,9 @@ def _loose(objects, connections, name):
 
 def _named(session, name, fuzzy):
     objects = session.objects()
-    found = [
-        identifier
-        for identifier, item in objects.items()
-        if item.get("kind") != "arrow" and item["name"].casefold() == str(name).casefold()
-    ]
+    named = [i for i, item in objects.items() if item["name"].casefold() == str(name).casefold()]
+    # An arrow answers to its label only when nothing else has that name.
+    found = [i for i in named if objects[i].get("kind") != "arrow"] or named
     if not found and fuzzy:
         found = _loose(objects, session.connections, name)
     if not found:
@@ -96,6 +97,9 @@ def resolve(reference, session, created, plural=False, fuzzy=False):
                 "This needs one selected object." if not plural else "Nothing is selected.",
             )
         return selected
+    if key == "it":
+        # A singular pronoun means the selection only when one object is selected.
+        return resolve({"selected": True}, session, created, fuzzy=fuzzy)
     if key == "last":
         identifier = session.history.get(f"last_{value}_id")
         if value not in ("created", "edited") or identifier not in objects:
@@ -152,6 +156,11 @@ def resolve_action(action, session, created, fuzzy=False):
             if len(ids) != 1:
                 raise ReferenceProblem("ambiguous_target", f"{key} names several objects.")
             arguments[key] = ids[0]
+    member = MEMBERS.get(action["name"])
+    if member:
+        box = next((b for b in session.canvas["schemas"] if b["id"] == arguments.get("schema_id")), None)
+        if box is not None and arguments.get(member[0]) not in box[member[1]]:
+            raise ReferenceProblem("missing_target", f"{box['name']} has no {arguments.get(member[0])!r}.")
     if PLURAL in arguments:
         references = arguments[PLURAL]
         if not isinstance(references, list):
@@ -275,7 +284,8 @@ def semantic_state(session):
 
 SYSTEM = (
     'Turn the command into an edit script {"actions": [...]} for this canvas. Target '
-    'arguments are references: {"name": ...}, {"selected": true}, {"last": "created"} or '
+    'arguments are references: {"name": ...}, {"selected": true}, {"it": true} for "it" or '
+    '"the selected shape", {"last": "created"} or '
     '{"last": "edited"}, {"new": n} for the object action n creates, {"kind": ...}, '
     '{"all": true}, or {"connection": {"from": ref, "to": ref}}. Refuse a request no action '
     'can carry out with {"actions": [], "reason": "unsupported_request"}.'
@@ -329,6 +339,7 @@ def script_schema():
     single = [
         _keyed("name", {"type": "string", "minLength": 1}),
         _keyed("selected", {"const": True}),
+        _keyed("it", {"const": True}),
         _keyed("last", {"enum": ["created", "edited"]}),
         _keyed("new", {"type": "integer", "minimum": 1}),
         _keyed("id", {"type": "string"}),
