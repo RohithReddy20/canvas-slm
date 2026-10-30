@@ -47,6 +47,29 @@ syntax errors. Few are single atomic edits like the current one-action contract 
 The mined files stay in `runs/colab/mine/` and are not committed, since they hold users'
 chat text.
 
+### Teacher labels and the first real test set
+
+`slm/teach.py` (Qwen3.8-27B-FP8 with thinking, on a Colab G4, about 12 compute units)
+labelled the 1,097 follow-ups: 411 other, 277 new-diagram requests, 195 edits (135
+high-level, 41 compound, 19 atomic), 117 error reports, 79 edits the tools cannot express
+(mostly layout direction and themes), 18 unparsed. 47 scripts applied in the simulator;
+reading them by hand kept 32 as test cases (about 68% teacher precision). The rest were
+translations, pasted code or open-ended rewrites.
+
+The 32 real cases are 21 compound and 11 atomic edits, in English (22 including
+unlabelled ShareGPT) and five other languages. Two thirds need several actions, which
+the one-action contract cannot express. The set is `runs/colab/real-test-v1.jsonl`,
+kept out of git like the mined data.
+
+## Edit scripts
+
+`slm/contract.py` defines the multi-action format: targets are references (a name, the
+selection, an object created earlier in the script, the connection between two objects)
+that code resolves, so missing and ambiguous targets are decided by rules instead of the
+model. `slm/convert.py` rewrites v7 labels as scripts and keeps a row only when its
+script resolves back to the original label (90% of a 2,000-row sample; missing and
+ambiguous refusals are dropped by design).
+
 ## Running on Colab
 
 `slm/colab_run.py` starts `slm/job.sh` on a Colab GPU VM, follows its log, and collects
