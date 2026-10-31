@@ -106,7 +106,7 @@ function compact(state) {
 
 // Each action's arguments: required, then optional (the page's zod schema is the authority).
 const SIGNATURES = {
-	create_component: [['component'], ['label', 'x', 'y']],
+	create_component: [['component'], ['label', 'near', 'side', 'x', 'y']],
 	create_shape: [['kind'], ['text', 'x', 'y', 'width', 'height']],
 	create_schema_box: [['name'], ['fields', 'methods']],
 	add_property: [['schema_id', 'property_name'], []],
@@ -176,7 +176,7 @@ function short(error) {
 	}
 }
 
-const TARGETS = ['schema_id', 'shape_id', 'source_id', 'target_id', 'frame_id']
+const TARGETS = ['schema_id', 'shape_id', 'source_id', 'target_id', 'frame_id', 'near']
 function toReal(action) {
 	const args = { ...(action.arguments ?? {}) }
 	const real = (value) => (typeof value === 'string' && session?.real.get(value)) || value
@@ -187,7 +187,7 @@ function toReal(action) {
 
 // --- tools ----------------------------------------------------------------------------
 const ACTIONS = `Actions (IDs are the short IDs from look; "?" marks optional arguments):
-- create_component(component, label, x?, y?): a system-design icon. component is one of: ${COMPONENTS.join(', ')}
+- create_component(component, label?, near?, side?): a system-design icon placed on a free spot beside near (an ID) on side right | left | above | below; x and y only for exact positions. component is one of: ${COMPONENTS.join(', ')}
 - create_shape(kind, text?, x?, y?, width?, height?): kind is rectangle | ellipse | diamond | triangle | text | note | frame | arrow
 - create_schema_box(name, fields, methods): a class or table box
 - add_property / remove_property(schema_id, property_name); add_method / remove_method(schema_id, method_name); rename_schema(schema_id, new_name)

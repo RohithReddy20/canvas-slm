@@ -3,6 +3,42 @@
 import { createShapeId, Editor, fitFrameToContent, TLArrowBinding, TLShape, TLShapeId } from 'tldraw'
 
 const PADDING = 48
+const GAP = 80
+export type Side = 'right' | 'left' | 'above' | 'below'
+
+/**
+ * A free spot for a new w x h object: beside `near` (else the selection, else right of
+ * everything) on `side`, moved on along that side until it overlaps nothing.
+ * slm/extensions.py place() mirrors this for the simulator.
+ */
+export function placeNear(editor: Editor, w: number, h: number, near: TLShape | null, side: Side = 'right') {
+	const selected = editor.getSelectedShapes()[0]
+	// Frames are room to place in, not obstacles: a shape placed inside one joins it.
+	const tops = editor
+		.getCurrentPageShapes()
+		.filter((shape) => !['arrow', 'group', 'frame'].includes(shape.type))
+		.map((shape) => editor.getShapePageBounds(shape)!)
+	let anchor = near ? editor.getShapePageBounds(near)! : selected ? editor.getShapePageBounds(selected)! : null
+	if (!anchor) {
+		if (!tops.length) {
+			const center = editor.getViewportPageBounds().center
+			return { x: center.x - w / 2, y: center.y - h / 2 }
+		}
+		const right = Math.max(...tops.map((b) => b.maxX))
+		anchor = { x: right - w, y: Math.min(...tops.map((b) => b.minY)), w, h } as never
+		side = 'right'
+	}
+	const a = anchor as { x: number; y: number; w: number; h: number }
+	let x = a.x + (side === 'right' ? a.w + GAP : side === 'left' ? -(w + GAP) : (a.w - w) / 2)
+	let y = a.y + (side === 'below' ? a.h + GAP : side === 'above' ? -(h + GAP) : (a.h - h) / 2)
+	const [sx, sy] = side === 'right' ? [w + GAP, 0] : side === 'left' ? [-(w + GAP), 0] : side === 'below' ? [0, h + GAP] : [0, -(h + GAP)]
+	for (let i = 0; i < 40; i++) {
+		if (!tops.some((b) => x < b.maxX && b.minX < x + w && y < b.maxY && b.minY < y + h)) break
+		x += sx
+		y += sy
+	}
+	return { x: Math.round(x), y: Math.round(y) }
+}
 
 function topLevel(editor: Editor, shape: TLShape): TLShape {
 	let current = shape

@@ -148,9 +148,12 @@ def observed_seed_rows(path, count, rng):
         if kind == "component":
             component = rng.choice(sorted(LABELS))
             label = rng.choice(LABELS[component])
-            command = f"add a {label.lower()} and connect {name(picked[0]).lower()} to it"
+            side = rng.choice(["right", "left", "above", "below"])
+            where = {"right": "next to", "left": "left of", "above": "above", "below": "below"}[side]
+            command = f"add a {label.lower()} {where} {name(picked[0]).lower()} and connect it"
             script = {"actions": [
-                {"name": "create_component", "arguments": {"component": component, "label": label}},
+                {"name": "create_component", "arguments": {"component": component, "label": label,
+                                                           "near": {"name": name(picked[0])}, "side": side}},
                 {"name": "connect_schemas", "arguments": {"source_id": {"name": name(picked[0])}, "target_id": {"new": 1}, "label": ""}},
             ]}
         elif kind == "frame":
@@ -303,6 +306,70 @@ def parse_user(text):
     return json.loads(match.group(1)), match.group(2).strip()
 
 
+COORDINATES = re.compile(r"\b[xy]\s*[=:]?\s*-?\d+|\(\s*-?\d+\s*,\s*-?\d+\s*\)|\bcoordinates?\b", re.I)
+
+
+def _side(anchor, x, y):
+    dx = x - (anchor["x"] + anchor["w"] / 2)
+    dy = y - (anchor["y"] + anchor["h"] / 2)
+    if abs(dx) >= abs(dy):
+        return "right" if dx >= 0 else "left"
+    return "below" if dy >= 0 else "above"
+
+
+def placed(script, session, command):
+    """The script with guessed coordinates replaced by placement the app computes.
+
+    A small model should not guess pixels: a component goes `near` the object it is wired
+    to (else the nearest object) on the side its guessed position implied, and a shape's
+    guessed x and y are dropped. Coordinates stay when the person says them."""
+    from contract import ReferenceProblem, resolve
+
+    if COORDINATES.search(command) or not script.get("actions"):
+        return script
+    script = copy.deepcopy(script)
+    objects = session.objects()
+    for index, action in enumerate(script["actions"], 1):
+        args = action.get("arguments", {})
+        if action.get("name") == "create_shape":
+            args.pop("x", None)
+            args.pop("y", None)
+        if action.get("name") != "create_component" or not isinstance(args.get("x"), (int, float)) \
+                or not isinstance(args.get("y"), (int, float)):
+            continue
+        x, y = args.pop("x"), args.pop("y")
+        if args.get("near"):
+            continue
+        partner = None
+        for other in script["actions"]:
+            other_args = other.get("arguments", {})
+            if other.get("name") != "connect_schemas":
+                continue
+            ends = (other_args.get("source_id"), other_args.get("target_id"))
+            if {"new": index} in ends:
+                partner = next((e for e in ends if e != {"new": index}), None)
+                break
+        anchor = None
+        if isinstance(partner, dict) and "new" not in partner:
+            try:
+                found = resolve(partner, session, {})
+                anchor = objects[found[0]] if len(found) == 1 else None
+            except (ReferenceProblem, ValueError, KeyError):
+                anchor = None
+        if anchor is None:
+            tops = [o for o in objects.values() if o.get("kind") != "arrow"]
+            if not tops:
+                continue
+            anchor = min(tops, key=lambda o: (o["x"] + o["w"] / 2 - x) ** 2 + (o["y"] + o["h"] / 2 - y) ** 2)
+            names = [o for o in objects.values() if o["name"] == anchor["name"]]
+            partner = {"name": anchor["name"]} if len(names) == 1 else None
+            if partner is None:
+                continue
+        args["near"] = partner
+        args["side"] = _side(anchor, x, y)
+    return script
+
+
 def state(session):
     return session.snapshot(), session.canvas["camera"]
 
@@ -422,7 +489,7 @@ def check(args):
             counts["bad_reference"] += 1
             continue
         try:
-            script = parse_script(answer)
+            script = placed(parse_script(answer), session, command)
             result, snapshot = outcome(script, session, command)
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             counts["bad_script"] += 1

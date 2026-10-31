@@ -54,7 +54,9 @@ components, text and notes take color and opacity; notes cannot be resized. Syst
 (databases, caches, queues, services, gateways...) are components. frame_shapes puts objects \
 in a new frame and add_to_frame moves them into an existing one; auto_layout tidies the \
 diagram (or some objects) along its arrows, left to right or top to bottom. Actions run in \
-order, so after a rename later actions name the object by its new name. Requests for \
+order, so after a rename later actions name the object by its new name. Place a new \
+component with near (the object it goes next to) and side, and the app finds a free spot; give \
+x and y only when the person says coordinates. Requests for \
 information, explanations or code, and anything no tool does (exporting, themes, fonts, \
 notes on arrows) get {"actions": [], "reason": "unsupported_request"}."""
 

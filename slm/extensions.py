@@ -37,11 +37,17 @@ FRAME_PADDING = 48
 LAYER_GAP, ITEM_GAP = 220, 70
 
 
+Side = Literal["right", "left", "above", "below"]
+PLACEMENT_GAP = 80
+
+
 class CreateComponent(StrictModel):
     component: Literal[COMPONENTS]
     label: str = Field(default="", max_length=100)
-    x: Number | None = None
-    y: Number | None = None
+    near: Name | None = Field(default=None, description="The object it goes next to.")
+    side: Side = Field(default="right", description="Which side of `near` it goes on.")
+    x: Number | None = Field(default=None, description="Only when the person gives coordinates.")
+    y: Number | None = Field(default=None, description="Only when the person gives coordinates.")
 
 
 class FrameShapes(StrictModel):
@@ -90,6 +96,8 @@ def _validated(action, session):
         raise ValueError("Shape IDs must be unique.")
     if any(identifier not in objects for identifier in ids):
         raise ValueError("Unknown canvas ID in shape targets.")
+    if arguments.get("near") is not None and arguments["near"] not in objects:
+        raise ValueError("Unknown canvas ID for near.")
     if action["name"] == "add_to_frame":
         frame = objects.get(arguments["frame_id"])
         if frame is None or frame.get("kind") != "frame":
@@ -145,6 +153,36 @@ def _frame_at(session, x, y, exclude=()):
         and o["x"] <= x <= o["x"] + o["w"] and o["y"] <= y <= o["y"] + o["h"]
     ]
     return max(frames, key=lambda o: o["order"])["id"] if frames else None
+
+
+def place(session, width, height, near=None, side="right"):
+    """A free spot for a new object: beside `near` (or the last created or edited object,
+    else right of everything) on `side`, moved on along that side until it overlaps no
+    other object (frames do not count).
+    observe/src/layout.ts places the same way on the real canvas."""
+    objects = session.objects()
+    anchor = objects.get(near) or objects.get(session.history.get("last_created_id")) \
+        or objects.get(session.history.get("last_edited_id"))
+    # Frames are room to place in, not obstacles: a shape placed inside one joins it.
+    tops = [o for o in objects.values() if o.get("kind") not in ("arrow", "group", "frame")]
+    if anchor is None:
+        if not tops:
+            return 0.0, 0.0
+        right = max(o["x"] + o["w"] for o in tops)
+        anchor = {"x": right - width, "y": min(o["y"] for o in tops), "w": width, "h": height}
+        side = "right"
+    step = {"right": (anchor["w"] + PLACEMENT_GAP, 0), "left": (-(width + PLACEMENT_GAP), 0),
+            "above": (0, -(height + PLACEMENT_GAP)), "below": (0, anchor["h"] + PLACEMENT_GAP)}[side]
+    x = anchor["x"] + step[0] + ((anchor["w"] - width) / 2 if side in ("above", "below") else 0)
+    y = anchor["y"] + step[1] + ((anchor["h"] - height) / 2 if side in ("left", "right") else 0)
+    advance = {"right": (width + PLACEMENT_GAP, 0), "left": (-(width + PLACEMENT_GAP), 0),
+               "above": (0, -(height + PLACEMENT_GAP)), "below": (0, height + PLACEMENT_GAP)}[side]
+    for _ in range(40):
+        if not any(x < o["x"] + o["w"] and o["x"] < x + width and y < o["y"] + o["h"] and o["y"] < y + height
+                   for o in tops):
+            break
+        x, y = x + advance[0], y + advance[1]
+    return float(round(x)), float(round(y))
 
 
 def _fit_frame(session, frame_id):
@@ -270,18 +308,20 @@ def _execute_extra(session, command, action, created_id):
         raise ValueError("Creation reuses an ID.")
     if name == "create_component":
         width, height = COMPONENT_SIZE
+        if args["x"] is None or args["y"] is None:
+            args["x"], args["y"] = place(session, width, height, args["near"], args["side"])
         session.canvas["shapes"].append(
             CanvasShape(
                 id=created_id,
                 name=args["label"][:100] or args["component"],
                 kind=f"component:{args['component']}",
                 text=args["label"],
-                x=args["x"] or 0,
-                y=args["y"] or 0,
+                x=args["x"],
+                y=args["y"],
                 w=width,
                 h=height,
                 order=len(objects),
-                parent_id=_frame_at(session, args["x"] or 0, args["y"] or 0),
+                parent_id=_frame_at(session, args["x"], args["y"]),
             ).model_dump()
         )
         target, made = created_id, True

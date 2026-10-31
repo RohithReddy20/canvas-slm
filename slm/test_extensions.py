@@ -46,6 +46,26 @@ def test_component_create_style_and_label():
     assert session.history["last_edited_id"] == cache["id"]
 
 
+def test_placement_beside_and_free():
+    session = run(canvas(), [
+        {"name": "create_component", "arguments": {"component": "cache", "label": "Cache A", "near": {"name": "API"}, "side": "below"}},
+        {"name": "create_component", "arguments": {"component": "cache", "label": "Cache B", "near": {"name": "API"}, "side": "below"}},
+    ])
+    api, a, b = (by_name(session, n) for n in ("API", "Cache A", "Cache B"))
+    assert a["y"] >= api["y"] + api["h"] and abs((a["x"] + a["w"] / 2) - (api["x"] + api["w"] / 2)) < 1
+    assert b["y"] >= a["y"] + a["h"], "the second one must not land on the first"
+    from distil_synth import placed
+    script = {"actions": [
+        {"name": "create_component", "arguments": {"component": "queue", "label": "Q", "x": 900, "y": 0}},
+        {"name": "connect_schemas", "arguments": {"source_id": {"name": "Orders"}, "target_id": {"new": 1}, "label": ""}},
+        {"name": "create_shape", "arguments": {"kind": "note", "text": "hi", "x": 5, "y": 5}},
+    ]}
+    cleaned = placed(script, canvas(), "add a queue after orders and a note")
+    component, _, note = (a["arguments"] for a in cleaned["actions"])
+    assert component["near"] == {"name": "Orders"} and "x" not in component and "x" not in note
+    assert placed(script, canvas(), "put a note at x 5 y 5") == script
+
+
 def test_frame_shapes_and_moves():
     session = run(canvas(), [{"name": "frame_shapes", "arguments": {"shape_ids": [{"name": "API"}, {"name": "Orders"}], "name": "Backend"}}])
     frame = by_name(session, "Backend")

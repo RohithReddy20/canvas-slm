@@ -27,7 +27,7 @@ from actions import model_canvas
 from extensions import SCRIPT_ACTIONS
 from sessions import CanvasSession, schema_height, shape_name
 
-SINGLE = ("schema_id", "shape_id", "source_id", "target_id", "frame_id")
+SINGLE = ("schema_id", "shape_id", "source_id", "target_id", "frame_id", "near")
 PLURAL = "shape_ids"
 REASONS = ("unsupported_request",)
 # Removing a member the box lacks is a missing target, as v7 labels it.
@@ -153,7 +153,7 @@ def resolve_action(action, session, created, fuzzy=False):
         raise ValueError(f"Expected a known action with arguments: {action!r}")
     arguments = dict(action["arguments"])
     for key in SINGLE:
-        if key in arguments:
+        if key in arguments and arguments[key] is not None:
             ids = resolve(arguments[key], session, created, fuzzy=fuzzy)
             if len(ids) != 1:
                 raise ReferenceProblem("ambiguous_target", f"{key} names several objects.")

@@ -10,7 +10,7 @@ import {
 } from 'tldraw'
 import { z } from 'zod'
 import { COMPONENT_KINDS, ComponentShape } from './components'
-import { addToFrame, autoLayout, frameShapes } from './layout'
+import { addToFrame, autoLayout, frameShapes, placeNear } from './layout'
 import { SchemaBoxShape, schemaHeight } from './SchemaBoxShapeUtil'
 
 const name = z.string().min(1).max(100)
@@ -193,6 +193,8 @@ export const actionSchema = z.discriminatedUnion('name', [
 		arguments: z.strictObject({
 			component: z.enum(COMPONENT_KINDS),
 			label: z.string().max(100).default(''),
+			near: name.nullable().default(null),
+			side: z.enum(['right', 'left', 'above', 'below']).default('right'),
 			x: number.nullable().default(null),
 			y: number.nullable().default(null),
 		}),
@@ -353,8 +355,9 @@ function createDrawing(
 	args: Extract<CanvasAction, { name: 'create_shape' }>['arguments']
 ) {
 	const { kind, text, width, height } = args
-	const center = editor.getViewportPageBounds().center
-	const position = { id, x: args.x ?? center.x - width / 2, y: args.y ?? center.y - height / 2 }
+	// No position given: a free spot beside the selection, not on top of other shapes.
+	const spot = args.x === null || args.y === null ? placeNear(editor, width, height, null) : null
+	const position = { id, x: args.x ?? spot!.x, y: args.y ?? spot!.y }
 	switch (kind) {
 		case 'rectangle':
 		case 'ellipse':
@@ -469,6 +472,7 @@ function validateEdit(editor: Editor, action: CanvasAction, expected: CanvasCont
 	if ('shape_ids' in args && args.shape_ids) args.shape_ids.forEach((id) => pageShape(editor, id))
 	if ('shape_id' in args) pageShape(editor, args.shape_id)
 	if ('schema_id' in args) targetShape(editor, args.schema_id)
+	if ('near' in args && args.near) pageShape(editor, args.near)
 	if ('frame_id' in args && pageShape(editor, args.frame_id).type !== 'frame')
 		throw new Error('The target is not a frame.')
 	if ('source_id' in args) {
@@ -629,14 +633,17 @@ export function executeCanvasAction(editor: Editor, raw: unknown, expected: Canv
 				case 'create_component': {
 					if (expected.shapes.length >= 60)
 						throw new Error('This demo supports up to 60 drawing shapes.')
-					const { component, label } = action.arguments
+					const { component, label, near, side } = action.arguments
 					createdId = editedId = createShapeId()
-					const center = editor.getViewportPageBounds().center
+					const spot =
+						action.arguments.x !== null && action.arguments.y !== null
+							? { x: action.arguments.x, y: action.arguments.y }
+							: placeNear(editor, 120, 110, near ? pageShape(editor, near) : null, side)
 					editor.createShape<ComponentShape>({
 						id: createdId,
 						type: 'voice-component',
-						x: action.arguments.x ?? center.x - 60,
-						y: action.arguments.y ?? center.y - 55,
+						x: spot.x,
+						y: spot.y,
 						props: { component, label },
 					})
 					editor.select(createdId)
