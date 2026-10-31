@@ -4,7 +4,8 @@
   the label (refusals leave it unchanged), comparable to the one-action exact accuracy;
 - sessions: v7 validation sessions closed-loop, the model acting on its own canvas;
 - compounds: held-out compound requests on validation canvases;
-- real: hand-checked real follow-ups, compared by diagram content (semantic_state).
+- real: hand-checked real follow-ups, compared by diagram content (semantic_state);
+- requests: held-out teacher requests on real-style diagrams (teach_data.py), scored alike.
 
 Each variant combines free or grammar-constrained decoding (script_schema) with the exact
 or the fuzzy name resolver; generations are cached, so variants share them where the
@@ -188,6 +189,7 @@ def main():
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--compounds", type=Path, required=True)
     parser.add_argument("--real", type=Path)
+    parser.add_argument("--requests", type=Path)
     parser.add_argument("--variants", default="free-exact", help="comma-separated decoding-resolver pairs")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -198,7 +200,10 @@ def main():
     valid = [r for r in rows if r["split"] == "valid"]
     receipt_rows = [r for r in valid if r["id"] in set(receipt["example_ids"])]
     compound_rows = [json.loads(line) for line in open(args.compounds)]
-    real_rows = [json.loads(line) for line in open(args.real)] if args.real and args.real.exists() else []
+    real_rows, request_rows = (
+        [json.loads(line) for line in open(path)] if path and path.exists() else []
+        for path in (args.real, args.requests)
+    )
     report = {"model": args.model, "adapter": str(args.adapter) if args.adapter else None}
     for variant in args.variants.split(","):
         decoding, resolver = variant.split("-")
@@ -211,6 +216,8 @@ def main():
         }
         if real_rows:
             report[variant]["real"] = real(model, real_rows, **options)
+        if request_rows:
+            report[variant]["requests"] = real(model, request_rows, **options)
         brief = {
             name: {k: v for k, v in part.items() if k not in ("cases", "per_stratum", "first_errors")}
             for name, part in report[variant].items()

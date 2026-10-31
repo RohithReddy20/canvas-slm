@@ -33,8 +33,16 @@ mkdir -p "$DATA"
 [ -f "$DATA/examples.jsonl" ] || tar -xJf "$WORK/data.tar.xz" -C "$DATA"
 
 echo "== prepare"
-[ -f "$RUNS/scripts-data/train.jsonl" ] || \
-  "$TRAIN" prepare_scripts.py --data "$DATA" --output "$RUNS/scripts-data"
+# TEACHER, when set, is teach_data.py output to train on as well: its folder, or the
+# teach-data.tar.xz that teach_data.sh packs.
+if [ -f "${TEACHER:-}" ]; then
+  tar -xJf "$TEACHER" -C "$WORK"
+  TEACHER=$WORK/teach-data
+fi
+PREPARE=(--data "$DATA" --output "$RUNS/scripts-data")
+[ -z "${TEACHER:-}" ] || PREPARE+=(--teacher "$TEACHER")
+[ -f "$RUNS/scripts-data/train.jsonl" ] || "$TRAIN" prepare_scripts.py "${PREPARE[@]}"
+cat "$RUNS/scripts-data/summary.json"
 
 echo "== train"
 TRAINING=(--model Qwen/Qwen3-1.7B --rows "$RUNS/scripts-data/train.jsonl" --output "$OUT")
@@ -66,7 +74,8 @@ uv pip install -q --python "$WORK/vllm-env/bin/python" "vllm==0.30.0" "pydantic>
 # vLLM compiles kernels on first use with the environment's own ninja.
 export PATH=$WORK/vllm-env/bin:$PATH
 EVALUATION=(evaluate_scripts.py --model "$OUT/merged" --data "$DATA"
-  --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real "$INPUT/real-test-v1.jsonl")
+  --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real "$INPUT/real-test-v1.jsonl"
+  --requests "$RUNS/scripts-data/dev-requests.jsonl")
 if [ "$GPUS" -gt 1 ]; then
   # Free and constrained decoding share no generations, so each gets a GPU.
   CUDA_VISIBLE_DEVICES=0 python "${EVALUATION[@]}" --variants free-exact,free-fuzzy \

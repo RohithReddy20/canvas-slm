@@ -6,7 +6,8 @@
 
 The kernel script carries the slm/ code. The v7 data comes from its Kaggle dataset,
 small private inputs from a private dataset, and models stay in the kernel's output
-on Kaggle. Only logs and reports come back.
+on Kaggle; a later kernel mounts them with --reuse and finds each runs/<name> folder at
+/tmp/reuse/<name>. Only logs and reports come back.
 """
 
 import argparse
@@ -32,8 +33,8 @@ from pathlib import Path
 
 CODE, JOB, EXTRA = {code!r}, {job!r}, {extra!r}
 DATA_FILES = ("examples.jsonl", "sessions.jsonl", "selection-receipt.json")
-code, data, inputs = Path("/tmp/slm"), Path("/tmp/data/v7"), Path("/tmp/input")
-for folder in (code, data, inputs):
+code, data, inputs, reuse = Path("/tmp/slm"), Path("/tmp/data/v7"), Path("/tmp/input"), Path("/tmp/reuse")
+for folder in (code, data, inputs, reuse):
     folder.mkdir(parents=True, exist_ok=True)
 tarfile.open(fileobj=io.BytesIO(base64.b64decode(CODE)), mode="r:xz").extractall(code)
 mounted = Path("/kaggle/input")
@@ -48,7 +49,13 @@ for bundle in mounted.rglob("canvas-training.bundle"):
 for path in mounted.rglob("*"):
     if path.is_file() and "canvas-slm-inputs" in str(path):
         shutil.copy(path, inputs / path.name)
-print("data", sorted(p.name for p in data.iterdir()), "inputs", sorted(p.name for p in inputs.iterdir()), flush=True)
+# Earlier kernels' runs/<name> folders (--reuse) appear as /tmp/reuse/<name>.
+for runs in mounted.rglob("runs"):
+    for folder in runs.iterdir() if runs.is_dir() else []:
+        if folder.is_dir() and not (reuse / folder.name).exists():
+            (reuse / folder.name).symlink_to(folder)
+print("data", sorted(p.name for p in data.iterdir()), "inputs", sorted(p.name for p in inputs.iterdir()),
+      "reuse", sorted(p.name for p in reuse.iterdir()), flush=True)
 working = Path("/kaggle/working")
 environment = {{**os.environ, "WORK": "/tmp/work", "DATA": str(data), "RUNS": str(working / "runs"),
                "INPUT": str(inputs), **EXTRA}}

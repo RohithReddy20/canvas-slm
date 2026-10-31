@@ -3,6 +3,8 @@
     python slm/colab_run.py start --gpu A100 --bundle /path/to/v7-kaggle-dataset
     python slm/colab_run.py start --job mine.sh --gpu none --high-mem --session mine
     python slm/colab_run.py start --job teach.sh --gpu G4 --session teach --input runs/colab/teach-input.jsonl
+    python slm/colab_run.py start --job teach_data.sh --gpu G4 --bundle runs/colab/v7-bundle \
+        --input teach-inputs --env INPUT=/content/input/teach-inputs "TEACH=--hours 1"
     python slm/colab_run.py status
     python slm/colab_run.py watch      # waits for the end, collects results, stops the VM
     python slm/colab_run.py collect [--adapters q17 ...]
@@ -211,7 +213,7 @@ with open({RUNS!r} + "/run.log", "a") as log:
         ["bash", {REMOTE + "/run.sh"!r}], stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True,
         env={{**os.environ, "DEADLINE_MINUTES": "{args.deadline}", "JOB": {args.job!r},
-             "PYTHONUNBUFFERED": "1"}},
+             "PYTHONUNBUFFERED": "1", **{dict(args.env)!r}}},
     ).wait()
 """
     environment = {**os.environ, "HOME": str(COLAB_HOME), "REQUEST_TIMEOUT": "120"}
@@ -257,7 +259,7 @@ def collect(args):
 import glob, json, os, subprocess
 os.chdir({RUNS!r})
 # Only small reports and logs leave the VM; models and datasets stay there.
-patterns = ("*.log", "*/*.json", "*/*.jsonl")
+patterns = ("*.log", "*/*.json", "*/*.jsonl", "*/*.xz")
 files = [p for pattern in patterns for p in glob.glob(pattern)
          if os.path.isfile(p) and os.path.getsize(p) <= 5 * 1024 * 1024]
 subprocess.run(["tar", "-czf", "/content/results.tar.gz", *files, *{names.split()!r}], check=True)
@@ -306,6 +308,8 @@ def main():
     parser.add_argument("--every", type=float, default=5, help="minutes between log reads")
     parser.add_argument("--adapters", nargs="*", default=[])
     parser.add_argument("--reuse", action="store_true", help="start on the session's VM")
+    parser.add_argument("--env", nargs="*", default=[], type=lambda x: tuple(x.split("=", 1)),
+                        help="NAME=VALUE pairs for the job")
     args = parser.parse_args()
     if args.command == "start":
         if args.bundle is None and args.job == "job.sh":

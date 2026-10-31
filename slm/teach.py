@@ -15,11 +15,21 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from typing import Literal, get_args, get_origin
+
 from actions import ACTION_MODELS, Color
 from contract import run_script, semantic_state, session_from
 
 CATEGORIES = ("edit", "unsupported_edit", "fix_error", "new_diagram", "other")
 EDIT_KINDS = ("atomic", "compound", "high_level")
+
+
+def choices(annotation):
+    """The values a Literal argument allows, also inside Optional; colors are listed apart."""
+    if get_origin(annotation) is Literal:
+        values = list(get_args(annotation))
+        return [] if values == list(get_args(Color)) else values
+    return [value for argument in get_args(annotation) for value in choices(argument)]
 
 
 def tool_lines():
@@ -29,6 +39,7 @@ def tool_lines():
             continue
         fields = ", ".join(
             field + ("" if info.is_required() else "?")
+            + (f": {' | '.join(map(str, values))}" if (values := choices(info.annotation)) else "")
             for field, info in model.model_fields.items()
         )
         lines.append(f"- {name}({fields}): {description}")
