@@ -1,0 +1,29 @@
+slm/test_extensions.py
+  s_33235c4d0ba77c::t_5eaf9b89906dff 41,72-78
+  s_33235c4d0ba77c::t_f5ef9a85032ddc 1-40,42-71,79-107
+slm/extensions.py
+  s_33235c4d0ba77c::t_951d1d7fa2edb3 1-237,242-338
+  s_33235c4d0ba77c::t_2dbe3145b25681 238-241
+slm/teach.py
+  s_33235c4d0ba77c::t_bfacdd97f6bc55 20-21,38
+slm/prompt.py
+  s_33235c4d0ba77c::t_bfacdd97f6bc55 20,66,83-86
+slm/contract.py
+  s_33235c4d0ba77c::t_bfacdd97f6bc55 4-6,26-27,30,149,356,368-372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d90b473dab14287221ba5f36142d6f1d7d8f500c",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
