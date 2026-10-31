@@ -1,0 +1,37 @@
+slm/cli_eval.py
+  s_33235c4d0ba77c::t_ce9d483b1da9b5 1-71
+  s_33235c4d0ba77c::t_3a1575d272e841 72-74
+  s_33235c4d0ba77c::t_d80919a131c8c2 75-86
+slm/real_match.py
+  s_33235c4d0ba77c::t_005235c9cb98b3 9-11,15-16,24,101-103,144-148,150
+  s_33235c4d0ba77c::t_3691da6ef18165 1-8,12-13,17-23,25-41,44-100,104-143,149,151-160,162-165
+  s_33235c4d0ba77c::t_e057fbc9fdb24a 14,42-43,161
+slm/distil_export.py
+  s_33235c4d0ba77c::t_6ecd703ecc2bb1 1-112
+slm/distil_score.py
+  s_33235c4d0ba77c::t_f11b14ad57fddf 58-59,68-69
+  s_33235c4d0ba77c::t_8cf55c3dfc6ecb 60-62
+  s_33235c4d0ba77c::t_6f3eb78e87c85c 37-38
+  s_33235c4d0ba77c::t_305235a79c78db 73
+  s_33235c4d0ba77c::t_dd6fcb98740952 1-19,21-36,39-42,45-56,63-67,70,74-102
+  s_33235c4d0ba77c::t_52a96be2ad7bf4 20,57,71-72
+  s_33235c4d0ba77c::t_5dd35b4e20a574 43-44
+slm/evaluate_scripts.py
+  s_33235c4d0ba77c::t_d4eaed7ad9c384 7-8,33,175,178,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c154ad9590c90d3c1341d82a0a794d6853b6f268",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
