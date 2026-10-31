@@ -1,0 +1,24 @@
+slm/extensions.py
+  s_33235c4d0ba77c::t_743fae4a172f36 13-17,140-149,284,304,335-352,354,374
+slm/observed.py
+  s_33235c4d0ba77c::t_743fae4a172f36 75-77
+  s_33235c4d0ba77c::t_4fe416b25b52ba 1-74,78-117
+observe/server.mjs
+  s_33235c4d0ba77c::t_743fae4a172f36 93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8782b053e6c4821ed3da4ba3ebc27ea1f340598",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
