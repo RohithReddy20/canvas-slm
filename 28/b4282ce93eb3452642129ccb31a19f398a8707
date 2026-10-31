@@ -1,0 +1,25 @@
+slm/evaluate_scripts.py
+  s_33235c4d0ba77c::t_6f89803b49648c 9-11,192-202
+  s_33235c4d0ba77c::t_f43cc06f37b872 213,224,226,242-243
+  s_33235c4d0ba77c::t_b830662fc7862f 203-204
+slm/prepare_scripts.py
+  s_33235c4d0ba77c::t_6f89803b49648c 14-17,80,121-131,136,142-143
+slm/scripts.sh
+  s_33235c4d0ba77c::t_3f6f0cca64cb17 44-45,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28b4282ce93eb3452642129ccb31a19f398a8707",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
