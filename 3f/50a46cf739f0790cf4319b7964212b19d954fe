@@ -1,0 +1,27 @@
+slm/distil_synth.py
+  s_33235c4d0ba77c::t_21e1f6eefd128a 111-113,115-130,132-137,174-177,181,184,208-212,218-219
+  s_33235c4d0ba77c::t_9eccc2db743bc6 16-21,307-374,389-395,397
+  s_33235c4d0ba77c::t_d504514d26475d 94,105-107
+  s_33235c4d0ba77c::t_c0b2dfeaf3a266 1-14,22-56,59-75,79-93,95-101,104,108-110,138,153-173,178-180,182-183,185-207,213-217,220-282,288-293,296,299-306,375-388,396,398-401
+  s_33235c4d0ba77c::t_e232125b38f6c0 283-287
+  s_33235c4d0ba77c::t_68940ea7b7f6b7 57-58,76-78
+  s_33235c4d0ba77c::t_7a51d3f2728dc9 102-103,114,131
+  s_33235c4d0ba77c::t_a67dc834cad3b4 139-152
+  s_33235c4d0ba77c::t_e53fa53e368fb4 15,294-295,297-298
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f50a46cf739f0790cf4319b7964212b19d954fe",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
