@@ -41,6 +41,8 @@ if [ -f "${TEACHER:-}" ]; then
 fi
 PREPARE=(--data "$DATA" --output "$RUNS/scripts-data")
 [ -z "${TEACHER:-}" ] || PREPARE+=(--teacher "$TEACHER")
+# SYNTHETIC, when set, is distil_synth.py's agreed rows (JSONL) to train on as well.
+[ -z "${SYNTHETIC:-}" ] || PREPARE+=(--synthetic "$SYNTHETIC")
 [ -f "$RUNS/scripts-data/train.jsonl" ] || "$TRAIN" prepare_scripts.py "${PREPARE[@]}"
 cat "$RUNS/scripts-data/summary.json"
 
@@ -75,7 +77,7 @@ uv pip install -q --python "$WORK/vllm-env/bin/python" "vllm==0.30.0" "pydantic>
 export PATH=$WORK/vllm-env/bin:$PATH
 EVALUATION=(evaluate_scripts.py --model "$OUT/merged" --data "$DATA"
   --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real "$INPUT/real-test-v1.jsonl"
-  --requests "$RUNS/scripts-data/dev-requests.jsonl")
+  --requests "$RUNS/scripts-data/dev-requests.jsonl" --synthetic "$RUNS/scripts-data/dev-synthetic.jsonl")
 if [ "$GPUS" -gt 1 ]; then
   # Free and constrained decoding share no generations, so each gets a GPU.
   CUDA_VISIBLE_DEVICES=0 python "${EVALUATION[@]}" --variants free-exact,free-fuzzy \

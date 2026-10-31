@@ -11,6 +11,10 @@ With --teacher (teach_data.py output), verified paraphrases join training on the
 source row's canvas, and verified real-style requests join it on their own canvases,
 except those from a tenth of the diagrams, kept as dev-requests.jsonl.
 
+With --synthetic (distil_synth.py agree output), the generated rows both teachers agree
+on join training on their own diagrams, except a tenth of the diagrams, kept as
+dev-synthetic.jsonl.
+
     python prepare_scripts.py --data /content/data/v7 --output /content/runs/scripts-data
 """
 
@@ -73,6 +77,7 @@ def main():
     parser.add_argument("--compounds", type=int, default=9000)
     parser.add_argument("--dev-compounds", type=int, default=400)
     parser.add_argument("--teacher", type=Path, help="teach_data.py output")
+    parser.add_argument("--synthetic", type=Path, help="distil_synth.py agreed rows")
     parser.add_argument("--seed", type=int, default=11)
     args = parser.parse_args()
     rng = random.Random(args.seed)
@@ -113,17 +118,29 @@ def main():
     for row in requests["train"]:
         rendered.append({"id": row["id"], "messages": messages(row["command"], session_from(row["canvas"])),
                          "reply": script_text(row["script"])})
+    synthetic = {"train": [], "dev": []}
+    if args.synthetic:
+        from distil_synth import session_of
+
+        for line in open(args.synthetic):
+            item = json.loads(line)
+            key = hashlib.sha256(json.dumps(item["diagram"], sort_keys=True).encode()).hexdigest()
+            synthetic["dev" if int(key, 16) % 10 == 0 else "train"].append(item)
+        for number, item in enumerate(synthetic["train"]):
+            rendered.append({"id": f"synthetic:{number}", "messages": messages(item["command"], session_of(item["diagram"])),
+                             "reply": script_text(item["script"])})
     rng.shuffle(rendered)
     with open(args.output / "train.jsonl", "w") as out:
         for row in rendered:
             out.write(json.dumps(row, ensure_ascii=False) + "\n")
-    for name, rows in (("dev-compounds", dev), ("dev-requests", requests["dev"])):
+    for name, rows in (("dev-compounds", dev), ("dev-requests", requests["dev"]), ("dev-synthetic", synthetic["dev"])):
         with open(args.output / f"{name}.jsonl", "w") as out:
             for row in rows:
                 out.write(json.dumps(row, ensure_ascii=False) + "\n")
     counts.update(train_rows=len(rendered), train_compounds=len(made), train_paraphrases=len(paraphrases),
                   train_requests=len(requests["train"]), dev_compounds=len(dev),
-                  dev_requests=len(requests["dev"]))
+                  dev_requests=len(requests["dev"]), train_synthetic=len(synthetic["train"]),
+                  dev_synthetic=len(synthetic["dev"]))
     summary = {"counts": dict(counts),
                "actions_per_train_row": dict(Counter(
                    len(r["script"]["actions"]) for r in train + requests["train"]))}

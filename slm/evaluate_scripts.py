@@ -6,7 +6,9 @@
 - compounds: held-out compound requests on validation canvases;
 - real: hand-checked real follow-ups, compared by diagram content (semantic_state) and by
   the relaxed same-edit check of real_match.py;
-- requests: held-out teacher requests on real-style diagrams (teach_data.py), scored alike.
+- requests: held-out teacher requests on real-style diagrams (teach_data.py), scored alike;
+- synthetic: held-out generated rows (prepare_scripts.py dev-synthetic.jsonl), correct when
+  the script leaves the diagram as the agreed script does.
 
 Each variant combines free or grammar-constrained decoding (script_schema) with the exact
 or the fuzzy name resolver; generations are cached, so variants share them where the
@@ -187,6 +189,19 @@ def real(model, rows, constrained=False, fuzzy=False):
             "outcomes": dict(Counter(r["outcome"] for r in results)), "cases": results}
 
 
+def synthetic(model, rows, constrained=False, fuzzy=False):
+    from distil_synth import outcome, session_of
+
+    texts = model.scripts([messages(r["command"], session_of(r["diagram"])) for r in rows], constrained)
+    outcomes, exact = Counter(), 0
+    for row, text in zip(rows, texts, strict=True):
+        predicted = session_of(row["diagram"])
+        outcomes[apply(text, predicted, row["command"], "new", fuzzy)] += 1
+        _, gold = outcome(row["script"], session_of(row["diagram"]), row["command"])
+        exact += (predicted.snapshot(), predicted.canvas["camera"]) == gold
+    return {"total": len(rows), "state_accuracy": exact / max(1, len(rows)), "outcomes": dict(outcomes)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, help="merged weights, or the base with --adapter")
@@ -195,6 +210,7 @@ def main():
     parser.add_argument("--compounds", type=Path, required=True)
     parser.add_argument("--real", type=Path)
     parser.add_argument("--requests", type=Path)
+    parser.add_argument("--synthetic", type=Path, help="prepare_scripts.py dev-synthetic.jsonl")
     parser.add_argument("--variants", default="free-exact", help="comma-separated decoding-resolver pairs")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -205,9 +221,9 @@ def main():
     valid = [r for r in rows if r["split"] == "valid"]
     receipt_rows = [r for r in valid if r["id"] in set(receipt["example_ids"])]
     compound_rows = [json.loads(line) for line in open(args.compounds)]
-    real_rows, request_rows = (
+    real_rows, request_rows, synthetic_rows = (
         [json.loads(line) for line in open(path)] if path and path.exists() else []
-        for path in (args.real, args.requests)
+        for path in (args.real, args.requests, args.synthetic)
     )
     report = {"model": args.model, "adapter": str(args.adapter) if args.adapter else None}
     for variant in args.variants.split(","):
@@ -223,6 +239,8 @@ def main():
             report[variant]["real"] = real(model, real_rows, **options)
         if request_rows:
             report[variant]["requests"] = real(model, request_rows, **options)
+        if synthetic_rows:
+            report[variant]["synthetic"] = synthetic(model, synthetic_rows, **options)
         brief = {
             name: {k: v for k, v in part.items() if k not in ("cases", "per_stratum", "first_errors")}
             for name, part in report[variant].items()
