@@ -1,0 +1,19 @@
+slm/cli_eval.py
+  s_33235c4d0ba77c::t_dd105c05e939ee 7-9,19,23,28,31,40,43-44,61-63,76-87,89-100,105-106,108,110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9f792b043a9069aba1b3e6a2e48477d02ed8604",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
