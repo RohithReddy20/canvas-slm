@@ -10,6 +10,11 @@ actions by wrapping `_execute` (old actions run unchanged), lets components take
 opacity and text, and SCRIPT_ACTIONS lists every tool a script may use. The geometry
 follows the tldraw implementation in observe/src (frame padding, layout gaps); exact pixel
 parity is not needed, since scripts name the action, not coordinates.
+
+Two tldraw behaviours are copied for the new tools only, so v7 actions run as frozen:
+a new component or frame created inside a frame's area becomes that frame's child; and
+styles pass to children through groups but not through frames (slm/observed.py parity
+checks the simulator against the logged tldraw sessions).
 """
 
 import copy
@@ -130,6 +135,16 @@ def _shift(session, identifier, dx, dy):
     for target in session.descendants([identifier]):
         objects[target]["x"] += dx
         objects[target]["y"] += dy
+
+
+def _frame_at(session, x, y, exclude=()):
+    """The frontmost frame whose area holds the point, as tldraw parents a new shape."""
+    frames = [
+        o for o in session.objects().values()
+        if o.get("kind") == "frame" and o["id"] not in exclude
+        and o["x"] <= x <= o["x"] + o["w"] and o["y"] <= y <= o["y"] + o["h"]
+    ]
+    return max(frames, key=lambda o: o["order"])["id"] if frames else None
 
 
 def _fit_frame(session, frame_id):
@@ -266,6 +281,7 @@ def _execute_extra(session, command, action, created_id):
                 w=width,
                 h=height,
                 order=len(objects),
+                parent_id=_frame_at(session, args["x"] or 0, args["y"] or 0),
             ).model_dump()
         )
         target, made = created_id, True
@@ -285,6 +301,7 @@ def _execute_extra(session, command, action, created_id):
                 w=right - left + 2 * FRAME_PADDING,
                 h=bottom - top + 2 * FRAME_PADDING,
                 order=lowest - 1,  # sent to the back, behind its children
+                parent_id=_frame_at(session, left - FRAME_PADDING, top - FRAME_PADDING, exclude=set(roots)),
             ).model_dump()
         )
         for identifier in roots:
@@ -315,7 +332,26 @@ def _set_component_text(session, command, action):
     _finish(session, command, action, before, shape["id"], False)
 
 
+def _style_targets(self, targets):
+    """Styled shapes: the targets, and the children of groups among them (not of frames)."""
+    objects, found, stack = self.objects(), [], list(targets)
+    while stack:
+        identifier = stack.pop()
+        shape = objects[identifier]
+        if shape.get("kind") == "group":
+            stack += [o["id"] for o in objects.values() if o["parent_id"] == identifier]
+        elif identifier not in found:
+            found.append(identifier)
+    has_frame_children = any(
+        o["parent_id"] and objects[o["parent_id"]].get("kind") == "frame" for o in objects.values()
+    )
+    if not has_frame_children:  # nothing new on the canvas: exactly the frozen behaviour
+        return _original_style_targets(self, targets)
+    return [objects[i] for i in sorted(found)]
+
+
 _original_execute = sessions.CanvasSession._execute
+_original_style_targets = sessions.CanvasSession.style_targets
 _original_supports_style = sessions.supports_style
 
 
@@ -335,4 +371,5 @@ def _supports_style(shape, style):
 
 
 sessions.CanvasSession._execute = _execute
+sessions.CanvasSession.style_targets = _style_targets
 sessions.supports_style = _supports_style

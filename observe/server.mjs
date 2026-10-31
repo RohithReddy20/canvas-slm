@@ -90,7 +90,7 @@ function compact(state) {
 	const style = (o) => ({ ...(o.color !== 'black' ? { color: o.color } : {}), ...(o.fill !== 'none' ? { fill: o.fill } : {}) })
 	const geometry = (o) => ({ x: round(o.x), y: round(o.y), w: round(o.w), h: round(o.h) })
 	return {
-		boxes: context.schemas.map((b) => ({ id: id(b.id), name: b.name, fields: b.properties, methods: b.methods, ...geometry(b), ...style(b) })),
+		boxes: context.schemas.map((b) => ({ id: id(b.id), name: b.name, fields: b.properties, methods: b.methods, ...geometry(b), ...style(b), ...(b.parent_id ? { parent: id(b.parent_id) } : {}) })),
 		shapes: context.shapes
 			.filter((s) => s.kind !== 'arrow')
 			.map((s) => ({ id: id(s.id), kind: s.kind, text: s.text, ...geometry(s), ...style(s), ...(s.parent_id ? { parent: id(s.parent_id) } : {}) })),
