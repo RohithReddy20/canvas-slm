@@ -1,8 +1,9 @@
 """Edit scripts: several canvas actions per command, with targets named as the user did.
 
 A script is {"actions": [...]} or a refusal {"actions": [], "reason": "unsupported_request"}.
-Actions use the tools of `actions.ACTION_MODELS`, except that target arguments
-(schema_id, shape_id, source_id, target_id, shape_ids) hold references instead of IDs:
+Actions use the tools of `extensions.SCRIPT_ACTIONS` (the v7 tools plus components,
+frames and auto-layout), except that target arguments (schema_id, shape_id, source_id,
+target_id, frame_id, shape_ids) hold references instead of IDs:
 
     {"name": "User"}                 the object with that name
     {"selected": true}               the current selection
@@ -22,10 +23,11 @@ ambiguous is decided here, not by the model.
 import copy
 import re
 
-from actions import ACTION_MODELS, model_canvas
+from actions import model_canvas
+from extensions import SCRIPT_ACTIONS
 from sessions import CanvasSession, schema_height, shape_name
 
-SINGLE = ("schema_id", "shape_id", "source_id", "target_id")
+SINGLE = ("schema_id", "shape_id", "source_id", "target_id", "frame_id")
 PLURAL = "shape_ids"
 REASONS = ("unsupported_request",)
 # Removing a member the box lacks is a missing target, as v7 labels it.
@@ -144,7 +146,7 @@ def resolve_action(action, session, created, fuzzy=False):
     if (
         not isinstance(action, dict)
         or set(action) != {"name", "arguments"}
-        or action["name"] not in ACTION_MODELS
+        or action["name"] not in SCRIPT_ACTIONS
         or action["name"] == "no_action"
         or not isinstance(action["arguments"], dict)
     ):
@@ -351,7 +353,7 @@ def script_schema():
          "required": ["from", "to"], "additionalProperties": False},
     )
     tools = []
-    for name, (model, _) in ACTION_MODELS.items():
+    for name, (model, _) in SCRIPT_ACTIONS.items():
         if name == "no_action":
             continue
         schema = model.model_json_schema()
@@ -363,7 +365,11 @@ def script_schema():
             elif key == PLURAL:
                 items = {"anyOf": [*single, _keyed("kind", {"type": "string"}),
                                    _keyed("all", {"const": True}), connection]}
-                value = {**value, "items": items}
+                if "anyOf" in value:  # optional targets (auto_layout): a list or null
+                    value = {"anyOf": [{**branch, "items": items} if branch.get("type") == "array" else branch
+                                       for branch in value["anyOf"]]}
+                else:
+                    value = {**value, "items": items}
             properties[key] = value
         tools.append(
             {"type": "object", "properties": {"name": {"const": name}, "arguments": {

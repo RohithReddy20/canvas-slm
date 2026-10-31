@@ -17,7 +17,8 @@ from pathlib import Path
 
 from typing import Literal, get_args, get_origin
 
-from actions import ACTION_MODELS, Color
+from actions import Color
+from extensions import SCRIPT_ACTIONS
 from contract import run_script, semantic_state, session_from
 
 CATEGORIES = ("edit", "unsupported_edit", "fix_error", "new_diagram", "other")
@@ -34,7 +35,7 @@ def choices(annotation):
 
 def tool_lines():
     lines = []
-    for name, (model, description) in ACTION_MODELS.items():
+    for name, (model, description) in SCRIPT_ACTIONS.items():
         if name == "no_action":
             continue
         fields = ", ".join(

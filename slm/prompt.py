@@ -17,6 +17,7 @@ from actions import (
     recent_context,
     validate_call,
 )
+from extensions import SCRIPT_ACTIONS
 from sessions import shape_name
 
 SYSTEM = (
@@ -62,7 +63,7 @@ def compact_object(item):
 
 
 def compact_call(call):
-    model = ACTION_MODELS[call["name"]][0]
+    model = SCRIPT_ACTIONS[call["name"]][0]
     arguments = {}
     for key, value in call["arguments"].items():
         field = model.model_fields.get(key)
@@ -79,6 +80,10 @@ def context_and_recent(canvas, history):
     context["shapes"] = [compact_object(shape) for shape in context["shapes"]]
     context["camera"] = {key: number(value) for key, value in context["camera"].items()}
     recent = recent_context(history or [], identifiers)
+    for turn in recent["turns"]:  # frozen recent_context predates frame_id
+        outcome = turn["outcome"]
+        if outcome != "rejected" and "frame_id" in outcome["arguments"]:
+            outcome["arguments"]["frame_id"] = identifiers.get(outcome["arguments"]["frame_id"], "removed")
     recent["turns"] = [
         {
             "command": turn["command"],
