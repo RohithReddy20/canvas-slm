@@ -1,0 +1,55 @@
+.voice-schema {
+	box-sizing: border-box;
+	overflow: hidden;
+	border: 1.5px solid #252820;
+	border-radius: 5px;
+	background: #faf9f5;
+	color: #252820;
+	box-shadow: 4px 4px 0 #25282012;
+}
+
+.voice-schema-name {
+	height: 52px;
+	box-sizing: border-box;
+	padding: 13px 16px;
+	background: #eeeedf;
+	border-bottom: 1px solid #252820;
+	font:
+		22px Georgia,
+		serif;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.voice-schema-section {
+	padding: 7px 16px;
+	border-bottom: 1px solid #c6c9b9;
+	font:
+		12px/24px Menlo,
+		monospace;
+}
+
+.voice-schema-section:last-child {
+	border-bottom: 0;
+}
+
+.voice-schema-section > div {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.voice-schema-label {
+	display: block;
+	font:
+		9px/12px Menlo,
+		monospace;
+	color: #777e67;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+}
+
+.voice-schema-empty {
+	color: #a5ab96;
+}

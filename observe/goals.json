@@ -1,0 +1,12 @@
+[
+  {"id": "ride-hailing", "goal": "a ride-hailing backend that matches riders with nearby drivers", "persona": "a candidate practising a system design interview who talks fast and corrects themselves"},
+  {"id": "chat-app", "goal": "a chat app with WebSockets, online presence and push notifications", "persona": "a startup CTO sketching the architecture for a new hire"},
+  {"id": "checkout", "goal": "an e-commerce checkout and payment flow", "persona": "a product manager who is not very technical and asks for things loosely"},
+  {"id": "video-pipeline", "goal": "a video upload, transcoding and streaming pipeline with a CDN", "persona": "a terse senior engineer who uses short commands"},
+  {"id": "news-feed", "goal": "a social news feed with fan-out on write and a timeline cache", "persona": "a student learning system design who sometimes asks the assistant to explain things"},
+  {"id": "hotel-schema", "goal": "the database tables for a hotel booking app, with fields and relationships", "persona": "a backend developer modelling tables as boxes with fields"},
+  {"id": "signup-flow", "goal": "a flowchart of user signup with email verification and retries", "persona": "a QA engineer mapping out the happy path and the failure paths"},
+  {"id": "ml-serving", "goal": "an ML model serving platform with a feature store and monitoring", "persona": "an ML engineer reorganising the diagram several times"},
+  {"id": "library-classes", "goal": "a class diagram for a library management system", "persona": "a computer science student working through an assignment"},
+  {"id": "rate-limiter", "goal": "a distributed rate limiter in front of several APIs", "persona": "an engineer who keeps refining names, labels and colors"}
+]
