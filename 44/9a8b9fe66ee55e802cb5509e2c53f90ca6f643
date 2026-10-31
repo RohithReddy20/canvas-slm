@@ -1,0 +1,38 @@
+slm/distil_synth.py
+  s_33235c4d0ba77c::t_85238078b47d6a 151-153,155-156
+  s_33235c4d0ba77c::t_55b22b4b5e746c 309-372,492
+slm/teach_data.py
+  s_33235c4d0ba77c::t_309679034eb119 57-59
+observe/server.mjs
+  s_33235c4d0ba77c::t_3138689d676b3b 109,179,190
+observe/src/layout.ts
+  s_33235c4d0ba77c::t_a94decb0254b51 6-15,17-18,20-41
+  s_33235c4d0ba77c::t_a8f1eddfa3726e 16,19
+slm/extensions.py
+  s_33235c4d0ba77c::t_309679034eb119 40-43,47-50,99-100,158-159,162-165,168-187,311-312,319-320,324
+  s_33235c4d0ba77c::t_a8f1eddfa3726e 160-161,166-167
+slm/test_extensions.py
+  s_33235c4d0ba77c::t_85238078b47d6a 49-68
+slm/contract.py
+  s_33235c4d0ba77c::t_309679034eb119 30,156
+observe/session.mjs
+  s_33235c4d0ba77c::t_19d9d742237d0a 47,50
+observe/src/voiceActions.ts
+  s_33235c4d0ba77c::t_cf15c9b7afa3a3 13,196-197,358-360,475,636,638-641,645-646
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "449a8b9fe66ee55e802cb5509e2c53f90ca6f643",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
