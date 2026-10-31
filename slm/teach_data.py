@@ -35,24 +35,27 @@ from convert import session_for, to_script
 from evaluate_scripts import FAILURES, apply
 from teach import tool_lines
 
-REFERENCES = """Target arguments (schema_id, shape_id, source_id, target_id, and each item of \
-shape_ids) are references, never raw values:
+REFERENCES = """Target arguments (schema_id, shape_id, source_id, target_id, frame_id, and each \
+item of shape_ids) are references, never raw values:
 {"name": "User"} the object with that name or text, spelled as on the canvas;
 {"it": true} what the command calls "it", "this" or "the selected shape": the one selected object;
 {"selected": true} the current selection as a group;
 {"last": "created"} or {"last": "edited"} the object created or edited most recently;
 {"new": 2} the object that action 2 of this script creates;
-{"kind": "diamond"} every object of a kind ("schema" for boxes) and {"all": true} every \
-object, for shape_ids only;
+{"kind": "diamond"} every object of a kind ("schema" for boxes, "component:cache" for a \
+component type) and {"all": true} every object, for shape_ids only;
 {"connection": {"from": ref, "to": ref}} the arrow between two objects;
 {"id": "box1"} an object by its canvas ID, when nothing else names it.
 Colors: """ + ", ".join(Color.__args__) + "."
 
 RULES = """Rules of this app: moves and pans default to 100 units, right and down are \
 positive. Fill works on boxes, geometric shapes and arrows only; frames take opacity only; \
-text and notes take color and opacity; notes cannot be resized. Requests for information, \
-explanations or code, and anything no tool does (layout direction, themes, fonts, notes on \
-arrows) get {"actions": [], "reason": "unsupported_request"}."""
+components, text and notes take color and opacity; notes cannot be resized. System pieces \
+(databases, caches, queues, services, gateways...) are components. frame_shapes puts objects \
+in a new frame and add_to_frame moves them into an existing one; auto_layout tidies the \
+diagram (or some objects) along its arrows, left to right or top to bottom. Requests for \
+information, explanations or code, and anything no tool does (exporting, themes, fonts, \
+notes on arrows) get {"actions": [], "reason": "unsupported_request"}."""
 
 GUIDE = f"""You turn a command for a diagramming canvas into an edit script.
 

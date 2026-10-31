@@ -5,7 +5,8 @@ its author sends, and the edit script for it. Diagrams use the plain format of t
 follow-ups (boxes, shapes, connections by ID, plus the selection and the last created and
 edited objects), which a teacher can write naturally; `session_of` rebuilds the canvas.
 
-    python distil_synth.py export --bundle ../runs/colab/v7-bundle --output ../runs/distil/synth
+    python distil_synth.py export --bundle ../runs/colab/v7-bundle --observed ../runs/observe/rows.jsonl \\
+        --output ../runs/distil/synth
     distil dataset create --data ../runs/distil/synth/dataset
     distil dataset generate-synthetic-data-train --smoke <dataset-id>
     distil dataset download -d ../runs/distil/synth/generated <generated-dataset-id>
@@ -37,47 +38,154 @@ from teach_data import GUIDE
 CANVAS_PARAGRAPH = GUIDE.split("\n\n")[1]
 DIAGRAM_PARAGRAPH = (
     'The input is a diagram as JSON: "boxes" are classes or tables with fields and methods; '
-    '"shapes" have a kind and text; "connections" are arrows between objects by ID, with a '
-    'label; "selected" lists the selected IDs; "last_created" and "last_edited" are the objects '
-    'created and edited most recently (or null). Colors are given only when not black. After the '
-    'diagram comes the message the diagram\'s author sends next.'
+    '"shapes" have a kind and text, where "component:database" and the like are system-design '
+    'components (an icon with a label); "connections" are arrows between objects by ID, with a '
+    'label; x, y, w, h place each object (right and down are positive) and "parent" is the frame '
+    'holding it; "selected" lists the IDs the person has selected; "last_created" and '
+    '"last_edited" are the objects created and edited most recently (or null). Colors are given '
+    'only when not black. After the diagram comes the message the diagram\'s author sends next.'
 )
 assert CANVAS_PARAGRAPH.startswith("The canvas is compact JSON")
 TASK = GUIDE.replace(CANVAS_PARAGRAPH, DIAGRAM_PARAGRAPH)
 
-GENERATION = """Write inputs as they occur when a person edits their own diagram with a voice or \
-chat assistant. The diagram is one people really draw: a class diagram, database tables, a \
-flowchart, a system or cloud architecture, a business process, a state machine, a mind map or \
-study notes, an org chart. It has 3 to 25 objects with realistic, domain-specific names (not \
-placeholders), consistent IDs, and connections that make sense. The message is the next thing \
-its author would say about it: often casual, short or vague; sometimes with typos or speech-to-\
-text slips; sometimes several edits in one sentence; sometimes pointing at "it", "this", "the \
-selected ones" or "the one I just added"; sometimes naming objects loosely ("the order table"). \
-Some messages ask for something no tool can do and must be refused; some name an object that is \
-missing or matches several objects, and the script still points at it the way the message does. \
+GENERATION = """Write inputs as they occur when a person edits their own diagram with a voice \
+assistant. The diagram is one people really draw, usually a system design (services, gateways, \
+databases, caches, queues, workers as components, often grouped in frames) and also class \
+diagrams, database tables, flowcharts, state machines and mind maps. It has 4 to 25 objects with \
+realistic, domain-specific names (not placeholders), consistent IDs, sensible positions and \
+connections. The message is the next thing its author says, and real people are messy:
+- about three in four messages ask for one thing ("add a cache", "make it red", "undo that"); \
+the rest combine two or three edits;
+- about half point with "it", "this", "these", "that one" or "the one I just added": "these" \
+and "this" usually mean what the person has selected, so the diagram's "selected" then lists \
+those objects;
+- names are often loose or slightly wrong ("the redis thing", "the payments one", "notif \
+service"), abbreviated, or garbled by speech-to-text;
+- some messages correct or undo ("no wait, the other one", "undo that"), and some are vague \
+("tidy this up", "lay it out left to right");
+- about one in twelve names something missing or matching several objects, and the script \
+still points at it the way the message does; a few ask for what no tool does (explain, export, \
+change the theme) and get the refusal.
 Every message is in English; names on the diagram are English too."""
 
 MUTATORS = [
     {"name": "request", "values": [
         "the message asks for one edit",
-        "the message asks for one edit, phrased casually or vaguely",
+        "the message asks for one edit, short and casual",
+        "the message asks for one edit to an object the person selected first, calling it this or these",
+        "the message asks for one edit to the object just created or edited, calling it it or that",
         "the message asks for two or three edits in one sentence",
-        "the message asks for a bigger addition: several new objects and the arrows wiring them in",
-        "the message refers to the selection, to 'it', or to the object just created or edited",
-        "the message changes names, fields, methods, text or labels of existing objects",
-        "the message removes, reconnects or restyles existing objects",
-        "the message asks for something no tool does (layout direction, explanation, code, theme), so the answer is the refusal",
+        "the message adds system-design components and wires them in with labelled arrows",
+        "the message puts objects in a frame, or moves objects into an existing frame",
+        "the message asks to lay out or tidy the diagram or part of it",
+        "the message renames, relabels, restyles, reconnects or removes existing objects, naming them loosely",
+        "the message corrects or undoes the previous change",
         "the message names an object that is not on the diagram or that matches several objects",
+        "the message asks for something no tool does (explain the design, export it, change the theme)",
     ]},
     {"name": "diagram", "values": [
-        "a class diagram", "database tables", "a flowchart", "a system or cloud architecture",
-        "a business process", "a state machine", "a mind map or study notes", "an org chart",
+        "a system architecture with components", "a system architecture with components grouped in frames",
+        "a data pipeline with queues, workers and storage", "a class diagram", "database tables",
+        "a flowchart", "a state machine", "a mind map or study notes",
     ]},
     {"name": "voice", "values": [  # English only: the product serves English speakers
         "plain English", "casual English", "English with typos", "English as speech-to-text, with slips",
         "terse English, a few words", "polite, wordy English",
     ]},
 ]
+
+LABELS = {
+    "cache": ["Redis Cache", "Session Cache", "CDN Cache"], "queue": ["Job Queue", "Order Queue", "Event Queue"],
+    "database": ["Postgres", "Orders DB", "User DB"], "load_balancer": ["Load Balancer"], "cdn": ["CDN"],
+    "monitoring": ["Metrics", "Monitoring"], "search": ["Search Index"], "auth": ["Auth Service"],
+    "worker": ["Worker", "Email Worker"], "notification": ["Notifier", "Push Service"],
+    "object_storage": ["S3 Bucket", "Blob Storage"], "service": ["Billing Service", "Profile Service"],
+}
+FRAMES = ["Backend", "Data Layer", "Edge", "Async Pipeline", "Core Services", "Storage", "Clients"]
+
+
+def diagram_from_observed(canvas):
+    """An observation-rig canvas (observe/server.mjs) as a plain diagram."""
+    keep = lambda item, keys: {k: item[k] for k in keys if k in item}  # noqa: E731
+    return {
+        "boxes": [keep(b, ("id", "name", "fields", "methods", "x", "y", "w", "h", "color", "fill", "parent"))
+                  for b in canvas["boxes"]],
+        "shapes": [keep(s, ("id", "kind", "text", "x", "y", "w", "h", "color", "fill", "parent"))
+                   for s in canvas["shapes"]],
+        "connections": [{"id": link["id"], "from": link["from"], "to": link["to"], "label": link["label"]}
+                        for link in canvas["links"] if link["from"] and link["to"]],
+        "selected": list(canvas["selected"]),
+        "last_created": canvas["last_created"],
+        "last_edited": canvas["last_edited"],
+    }
+
+
+def observed_seed_rows(path, count, rng):
+    """Rows for the new tools on observed canvases, with commands and scripts made by code."""
+    canvases, seen = [], set()
+    for line in open(path):
+        canvas = json.loads(line)["before"]
+        key = json.dumps(canvas, sort_keys=True)
+        if len(canvas["boxes"]) + len(canvas["shapes"]) >= 4 and key not in seen:
+            seen.add(key)
+            canvases.append(canvas)
+    rng.shuffle(canvases)
+    kept, kinds = [], Counter()
+    for canvas in canvases:
+        if len(kept) >= count:
+            break
+        diagram = diagram_from_observed(canvas)
+        top = [o for o in diagram["boxes"] + diagram["shapes"] if not o.get("parent") and o.get("kind") != "frame"]
+        name = lambda o: o.get("name") or o.get("text")  # noqa: E731
+        named = [o for o in top if name(o)]
+        frames = [o for o in diagram["shapes"] if o.get("kind") == "frame" and o.get("text")]
+        if len(named) < 3:
+            continue
+        kind = rng.choice(["component", "frame", "frame_selected", "add_to_frame", "layout"])
+        picked = rng.sample(named, 3)
+        if kind == "component":
+            component = rng.choice(sorted(LABELS))
+            label = rng.choice(LABELS[component])
+            command = f"add a {label.lower()} and connect {name(picked[0]).lower()} to it"
+            script = {"actions": [
+                {"name": "create_component", "arguments": {"component": component, "label": label}},
+                {"name": "connect_schemas", "arguments": {"source_id": {"name": name(picked[0])}, "target_id": {"new": 1}, "label": ""}},
+            ]}
+        elif kind == "frame":
+            frame = rng.choice(FRAMES)
+            command = f"put {name(picked[0])}, {name(picked[1])} and {name(picked[2])} in a frame called {frame}"
+            script = {"actions": [{"name": "frame_shapes", "arguments": {
+                "shape_ids": [{"name": name(o)} for o in picked], "name": frame}}]}
+        elif kind == "frame_selected":
+            frame = rng.choice(FRAMES)
+            diagram["selected"] = [o["id"] for o in picked[:2]]
+            command = f"frame these as {frame}"
+            script = {"actions": [{"name": "frame_shapes", "arguments": {"shape_ids": [{"selected": True}], "name": frame}}]}
+        elif kind == "add_to_frame":
+            if not frames:
+                continue
+            frame = rng.choice(frames)
+            command = f"move {name(picked[0])} into the {frame['text']} frame"
+            script = {"actions": [{"name": "add_to_frame", "arguments": {
+                "shape_ids": [{"name": name(picked[0])}], "frame_id": {"name": frame["text"]}}}]}
+        else:
+            direction = rng.choice(["left_to_right", "top_to_bottom"])
+            command = "lay it all out left to right" if direction == "left_to_right" else "tidy this up top to bottom"
+            script = {"actions": [{"name": "auto_layout", "arguments": {"direction": direction}}]}
+        try:
+            objects = session_of(diagram).objects()
+            diagram["selected"] = [i for i in diagram["selected"] if i in objects]
+            for key in ("last_created", "last_edited"):  # recent objects since deleted
+                diagram[key] = diagram[key] if diagram[key] in objects else None
+            result, _ = outcome(script, session_of(diagram), command)
+        except (ValueError, KeyError, TypeError, IndexError):
+            continue
+        if result != "applied":
+            continue
+        kinds[kind] += 1
+        kept.append({"id": f"observed:{len(kept)}", "kind": kind, "user": user_text(diagram, command),
+                     "answer": script_text(script)})
+    return kept, kinds
 
 
 def diagram_of(session):
@@ -92,9 +200,15 @@ def diagram_of(session):
         return entry
 
     present = lambda i: i if i in session.objects() else None  # noqa: E731
-    boxes = [styled(b, {"id": b["id"], "name": b["name"], "fields": b["properties"], "methods": b["methods"]})
+    def placed(item, entry):
+        entry.update({key: round(item[key]) for key in ("x", "y", "w", "h")})
+        if item.get("parent_id"):
+            entry["parent"] = item["parent_id"]
+        return styled(item, entry)
+
+    boxes = [placed(b, {"id": b["id"], "name": b["name"], "fields": b["properties"], "methods": b["methods"]})
              for b in session.canvas["schemas"]]
-    shapes = [styled(s, {"id": s["id"], "kind": s["kind"], "text": s["text"]})
+    shapes = [placed(s, {"id": s["id"], "kind": s["kind"], "text": s["text"]})
               for s in session.canvas["shapes"] if s["id"] not in linked and s["kind"] != "group"]
     return {
         "boxes": boxes,
@@ -127,6 +241,8 @@ def shortened(diagram, script):
     for key in ("boxes", "shapes"):
         for item in short[key]:
             item["id"] = rename(item["id"])
+            if item.get("parent"):
+                item["parent"] = rename(item["parent"])
     for link in short["connections"]:
         link["id"], link["from"], link["to"] = rename(link["id"]), rename(link["from"]), rename(link["to"])
     short["selected"] = [rename(i) for i in short["selected"]]
@@ -152,9 +268,21 @@ def session_of(diagram):
             link["shape_id"] = given["id"]
     objects = session.objects()
     for item in [*diagram.get("boxes", []), *diagram.get("shapes", [])]:
+        if item.get("id") not in objects:
+            continue
+        target = objects[item["id"]]
         for key in ("color", "fill"):
-            if key in item and item["id"] in objects:
-                objects[item["id"]][key] = item[key]
+            if key in item:
+                target[key] = item[key]
+        for key in ("x", "y", "w", "h"):  # positions and sizes when the diagram gives them
+            if isinstance(item.get(key), (int, float)) and not isinstance(item.get(key), bool):
+                target[key] = float(item[key]) if key in "xy" else max(1.0, float(item[key]))
+        parent = item.get("parent")
+        if parent:
+            if objects.get(parent, {}).get("kind") not in ("frame", "group") or parent == item["id"]:
+                raise ValueError(f"{item['id']} sits in {parent!r}, which is no frame")
+            target["parent_id"] = parent
+    session.normalize_context()
     session.canvas["selected_ids"] = sorted(i for i in diagram.get("selected") or [] if i in objects)
     for key in ("last_created", "last_edited"):
         value = diagram.get(key)
@@ -253,9 +381,15 @@ def export(args):
     rng = random.Random(args.seed)
     rows, kinds = seed_rows(args.bundle, args.seeds + args.test, rng)
     rng.shuffle(rows)
+    test, rows = rows[: args.test], rows[args.test:]
+    if args.observed:  # new-tool seeds on observed canvases, for training only
+        extra, extra_kinds = observed_seed_rows(args.observed, args.observed_seeds, rng)
+        rows += extra
+        kinds.update({f"observed:{k}": v for k, v in extra_kinds.items()})
+        rng.shuffle(rows)
     dataset = args.output / "dataset"
     dataset.mkdir(parents=True, exist_ok=True)
-    splits = {"test": rows[: args.test], "train": rows[args.test:]}
+    splits = {"test": test, "train": rows}
     for split, items in splits.items():
         with open(dataset / f"{split}.jsonl", "w") as out:
             for item in items:
@@ -383,6 +517,8 @@ def main():
     making.add_argument("--teacher", default="moonshotai.kimi-k3-low-thinking")
     making.add_argument("--target", type=int, default=5000)
     making.add_argument("--seed", type=int, default=17)
+    making.add_argument("--observed", type=Path, help="observation rows (observe/analyze.py --rows)")
+    making.add_argument("--observed-seeds", type=int, default=80)
     checking = commands.add_parser("check")
     checking.add_argument("--input", type=Path, required=True)
     checking.add_argument("--output", type=Path, required=True)
