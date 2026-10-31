@@ -147,6 +147,43 @@ the canvas." (delete), so the model deletes the selection and the session diverg
 there. The seventh is a fill style v7 calls unsupported on that shape. Both are wording and
 rule coverage, not harness errors; real follow-ups stay at 3–4 of 32 with no compound right.
 
+### Teacher-written data (2026-10-31)
+
+`slm/teach_data.py` has Qwen3.8-27B (FP8, Colab G4) write English training data, keeping
+a row only when an independent greedy teacher reply leaves the same canvas:
+
+- real-style requests: the teacher draws a canvas from a mined diagram or diagram request,
+  then writes follow-ups for it (single edits, compound edits, one no tool can do) with
+  their scripts; 1,508 of 3,497 kept;
+- paraphrases of v7 training commands, checked against the v7 label on the source row's
+  canvas; 10,405 of 15,239 kept.
+
+A 4-bit 27B loads on Kaggle's two T4s (`teacher_probe.py`) but takes about 2.9 s per script
+there, so the job ran on a G4 instead: 1.1 hours of teaching, 12 compute units. The
+teacher's tool list first lacked the allowed `operation` values; the checks then agreed
+with v7 on 35% of unchanged commands, and on 79% once the values were listed.
+
+Retrained on Kaggle with the teacher rows (44,769 rows, 34.0M tokens, 954 steps in 4.9
+hours; free). A tenth of the request diagrams are held out as a new dev set:
+
+| Free decoding | Before | With teacher data |
+|---|---|---|
+| Dev commands (1,700) | 93.2% | 95.3% |
+| Subset (256) | 92.2% | 92.2% |
+| Sessions, agreement | 36.7% | 54.3% |
+| Sessions, first error turn | 9.9 | 13.5 |
+| Compounds | 96.2% | 95.0% |
+| Held-out teacher requests (137) | – | 81.0% (atomic 26/33, compound 27/45, refusal 58/59) |
+| Real (32) | 3 | 4 |
+| Real, English and unlabelled (22) | 1 | 3 |
+
+Sessions improved most; "Remove all objects from the selection." is still the first error
+in four of eight. Real follow-ups barely moved, and they now fail differently: 14 of 32
+are refused as unsupported (before: 9 invalid, 6 unparsed, 9 missing targets). Refusals
+verify far more often than compound edits (74% against 27%), so they make up 37% of the
+teacher's requests, and the model now refuses vague real requests ("can you integrate
+SQL MP database") that the hand-checked labels treat as edits.
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
