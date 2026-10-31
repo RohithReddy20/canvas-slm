@@ -1,0 +1,23 @@
+slm/teach_data.py
+  s_33235c4d0ba77c::t_43560cb7b2b0f3 38-39,45-46,53-58
+slm/distil_synth.py
+  s_33235c4d0ba77c::t_8eb1f2d64b63e4 8-9,51-68,74-76,78-82,84,87-89,97-175,180-189,384-389,392,520-521
+  s_33235c4d0ba77c::t_c20da8e2827f90 41-46,203-209,211,244-245,271-273,275-285
+  s_33235c4d0ba77c::t_5fb6d166b89ab9 176-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9937f5393cf988c15353382e1e76b22585717f4c",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
