@@ -83,10 +83,12 @@ MUTATORS = [
         "the message names an object that is not on the diagram or that matches several objects",
         "the message asks for something no tool does (explain the design, export it, change the theme)",
     ]},
-    {"name": "diagram", "values": [
-        "a system architecture with components", "a system architecture with components grouped in frames",
-        "a data pipeline with queues, workers and storage", "a class diagram", "database tables",
-        "a flowchart", "a state machine", "a mind map or study notes",
+    {"name": "diagram", "values": [  # mostly system designs, as in the observed sessions
+        "a system architecture with components", "a system architecture with components",
+        "a system architecture with components grouped in frames",
+        "a system architecture with components grouped in frames",
+        "a data pipeline with queues, workers and storage", "an event-driven backend with components",
+        "a class diagram", "database tables", "a flowchart", "a state machine or mind map",
     ]},
     {"name": "voice", "values": [  # English only: the product serves English speakers
         "plain English", "casual English", "English with typos", "English as speech-to-text, with slips",
