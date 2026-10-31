@@ -1,0 +1,73 @@
+observe/analyze.py
+  s_33235c4d0ba77c::t_95066820ccfd30 1-46,48-49,53-73,76-84,86-88,103-114
+  s_33235c4d0ba77c::t_5b64c563706aad 47,50-52,74-75,85,89-102
+observe/tsconfig.json
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-13
+observe/src/SchemaBoxShapeUtil.tsx
+  s_33235c4d0ba77c::t_6f2b9e4a5f448c 1-136
+observe/goals.json
+  s_33235c4d0ba77c::t_76a6da03fe390f 1-12
+observe/src/main.tsx
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-25
+observe/src/voiceActions.ts
+  s_33235c4d0ba77c::t_02b53c1728c330 469
+  s_33235c4d0ba77c::t_32643f3c3ab8f2 12,176,192-199,293-298,479-480,495,614,627-641,769-770
+  s_33235c4d0ba77c::t_d26771d7eda241 13,175,177-191,472-473,608-613,615-626
+  s_33235c4d0ba77c::t_6f2b9e4a5f448c 1-11,14-174,200-292,299-468,470-471,474-478,481-494,496-607,642-768,771-856
+observe/src/components.tsx
+  s_33235c4d0ba77c::t_b7d914703c6965 1-117
+observe/package.json
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-24
+observe/vite.config.ts
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-4
+observe/src/bridge.ts
+  s_33235c4d0ba77c::t_d26771d7eda241 60-61,63-70,72-74
+  s_33235c4d0ba77c::t_d00fd898e900e7 23-32,58-59,83,87,94
+  s_33235c4d0ba77c::t_02b53c1728c330 33,62,71
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-22,34-57,75-82,84-86,88-93,95-97
+observe/src/layout.ts
+  s_33235c4d0ba77c::t_cb23f17b23764b 1-107,109-135,137-138
+  s_33235c4d0ba77c::t_c822d4699a7368 108
+  s_33235c4d0ba77c::t_02b53c1728c330 136
+observe/index.html
+  s_33235c4d0ba77c::t_1d50e5a4875887 1-12
+observe/src/schema.css
+  s_33235c4d0ba77c::t_b5ee581dc322d3 1-55
+observe/batch.mjs
+  s_33235c4d0ba77c::t_cac8848b3fff2c 13,19-21
+  s_33235c4d0ba77c::t_09c845a5bb58c2 1-12,14-18,36-38
+  s_33235c4d0ba77c::t_8cf315a4d17f09 22-35
+observe/server.mjs
+  s_33235c4d0ba77c::t_5906f488da046e 62,107-127,131-178,240-241,243-247,251
+  s_33235c4d0ba77c::t_cac8848b3fff2c 128-130,179,201-203,261-274,317-320
+  s_33235c4d0ba77c::t_b271ea19346681 1-61,63-106,180-200,204-237,242,248-250,252-260,275-316,321-328,331-341
+  s_33235c4d0ba77c::t_5201c1b881305a 238-239
+  s_33235c4d0ba77c::t_d00fd898e900e7 329-330
+observe/session.mjs
+  s_33235c4d0ba77c::t_8bd0bff51771fe 83-85
+  s_33235c4d0ba77c::t_6cbb76e649d831 1-19,21-27,37-38,41-42,44-46,48,67-70,78-82,86-99
+  s_33235c4d0ba77c::t_8cf315a4d17f09 71-72,74-77
+  s_33235c4d0ba77c::t_5906f488da046e 49-57,60-66
+  s_33235c4d0ba77c::t_cac8848b3fff2c 20,28-36,39-40,47,58-59,73
+  s_33235c4d0ba77c::t_d00fd898e900e7 43
+observe/.gitignore
+  s_33235c4d0ba77c::t_57d0cecc9d9d9a 1-2
+observe/package-lock.json
+  s_33235c4d0ba77c::t_1d5baf9c6615ca 1-4939
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6ca94b06bdb2104769f981b72ded396d6992ec8b",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
