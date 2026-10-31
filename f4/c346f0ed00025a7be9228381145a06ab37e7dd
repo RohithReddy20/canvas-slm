@@ -1,0 +1,47 @@
+slm/kaggle_run.py
+  s_4d9165ed3ec1fd::t_4efaae9b282769 9-10,36-37,52-58
+slm/teach_data.py
+  s_4d9165ed3ec1fd::t_5c348c1c3076b1 111-113,129-135,154-155,376-380
+  s_4d9165ed3ec1fd::t_5ae043163bb95e 397-405,407
+  s_4d9165ed3ec1fd::t_a8cd8ab643a65d 1-73,76-94,97-105,114,117-120,123-128,136-137,139-153,156-161,165-166,168-197,201-262,265-267,269-291,293-305,307-309,311-316,320-321,324-337,340-375,381-386,391-396,406,408-439
+  s_4d9165ed3ec1fd::t_c0e94ddfa83c61 74-75,198-200,387-390
+  s_4d9165ed3ec1fd::t_6bfe6a66bc3620 106-107,138,162-164,167
+  s_4d9165ed3ec1fd::t_1b8c3fce491601 317-319
+  s_4d9165ed3ec1fd::t_f832d8eabaa135 95-96,108-110,115-116,121-122,263-264,268,292,306,310,322-323,338-339
+slm/evaluate_scripts.py
+  s_4d9165ed3ec1fd::t_eb404f6ea26ef9 7-8,192,203-206,219-220
+slm/colab_run.py
+  s_4d9165ed3ec1fd::t_e075b701a3e33b 262
+  s_4d9165ed3ec1fd::t_893ba111f50489 6-7,216,311-312
+slm/teacher_probe.sh
+  s_4d9165ed3ec1fd::t_87e72cd7743a55 1-25
+slm/scripts.sh
+  s_4d9165ed3ec1fd::t_eb404f6ea26ef9 42-45,77-78
+  s_4d9165ed3ec1fd::t_e075b701a3e33b 36-41
+slm/teach_data.sh
+  s_4d9165ed3ec1fd::t_363cea33ff6f5d 1-11,14-21,25
+  s_4d9165ed3ec1fd::t_e075b701a3e33b 22-24
+  s_4d9165ed3ec1fd::t_893ba111f50489 12-13
+slm/teach.py
+  s_4d9165ed3ec1fd::t_c0e94ddfa83c61 18-19,27-34,42
+slm/teacher_probe.py
+  s_4d9165ed3ec1fd::t_b77bfa4418f1b6 1-85
+slm/prepare_scripts.py
+  s_4d9165ed3ec1fd::t_1cd4c3ab6fbccb 10-13,19,25,46-68,75,102-105,107-116,118,120-126,128-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f4c346f0ed00025a7be9228381145a06ab37e7dd",
+  "prompts": {},
+  "sessions": {
+    "s_4d9165ed3ec1fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e741aa7-843a-4d52-9680-94fe308473aa",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
