@@ -4,7 +4,8 @@
   the label (refusals leave it unchanged), comparable to the one-action exact accuracy;
 - sessions: v7 validation sessions closed-loop, the model acting on its own canvas;
 - compounds: held-out compound requests on validation canvases;
-- real: hand-checked real follow-ups, compared by diagram content (semantic_state);
+- real: hand-checked real follow-ups, compared by diagram content (semantic_state) and by
+  the relaxed same-edit check of real_match.py;
 - requests: held-out teacher requests on real-style diagrams (teach_data.py), scored alike.
 
 Each variant combines free or grammar-constrained decoding (script_schema) with the exact
@@ -29,6 +30,7 @@ from contract import (
     session_from,
 )
 from convert import session_for
+from real_match import relaxed
 from sessions import CanvasSession
 
 FAILURES = (ValueError, IndexError, KeyError, TypeError, AttributeError)
@@ -170,14 +172,17 @@ def real(model, rows, constrained=False, fuzzy=False):
     for row, text in zip(rows, texts, strict=True):
         session = session_from(row["canvas"])
         outcome = apply(text, session, row["command"], "new", fuzzy)
+        before = semantic_state(session_from(row["canvas"]))
         results.append({"id": row["id"], "language": row["language"], "edit_kind": row["edit_kind"],
                         "outcome": outcome, "correct": semantic_state(session) == row["after"],
+                        "relaxed": relaxed(before, semantic_state(session), row["after"], row["command"]),
                         "reply": text[:600]})
     by = lambda key: {  # noqa: E731
         value: f"{sum(r['correct'] for r in results if r[key] == value)}/{sum(r[key] == value for r in results)}"
         for value in sorted({r[key] for r in results})
     }
     return {"total": len(rows), "content_accuracy": sum(r["correct"] for r in results) / len(rows),
+            "relaxed_accuracy": sum(r["relaxed"] for r in results) / len(rows),
             "by_kind": by("edit_kind"), "by_language": by("language"),
             "outcomes": dict(Counter(r["outcome"] for r in results)), "cases": results}
 
