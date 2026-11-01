@@ -66,6 +66,25 @@ def test_placement_beside_and_free():
     assert placed(script, canvas(), "put a note at x 5 y 5") == script
 
 
+def test_placement_follows_last_created_wiring():
+    """A queue wired by {"last": "created"} goes beside its source, not the nearest object;
+    a worker wired to that queue goes beside the queue."""
+    from distil_synth import placed
+
+    api = by_name(canvas(), "API")
+    script = {"actions": [
+        {"name": "create_component", "arguments": {"component": "queue", "label": "Q",
+                                                    "x": api["x"], "y": api["y"] + 400}},
+        {"name": "connect_schemas", "arguments": {"source_id": {"name": "API"}, "target_id": {"last": "created"}, "label": "push"}},
+        {"name": "create_component", "arguments": {"component": "worker", "label": "W",
+                                                    "x": api["x"], "y": api["y"] + 600}},
+        {"name": "connect_schemas", "arguments": {"source_id": {"name": "Q"}, "target_id": {"last": "created"}, "label": "consume"}},
+    ]}
+    queue, _, worker, _ = (a["arguments"] for a in placed(script, canvas(), "a queue under the api and a worker under it")["actions"])
+    assert queue["near"] == {"name": "API"} and queue["side"] == "below" and "x" not in queue
+    assert worker["near"] == {"new": 1} and worker["side"] == "below"
+
+
 def test_frame_shapes_and_moves():
     session = run(canvas(), [{"name": "frame_shapes", "arguments": {"shape_ids": [{"name": "API"}, {"name": "Orders"}], "name": "Backend"}}])
     frame = by_name(session, "Backend")

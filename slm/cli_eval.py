@@ -79,7 +79,7 @@ def main():
                 with tempfile.TemporaryDirectory() as empty:  # nothing for the agent to read or edit
                     return ask(args.model, guide, prompt, args.timeout, empty, ending)
             except RuntimeError as error:
-                if not re.search(r"RESOURCE_EXHAUSTED|quota|credits|429", str(error), re.I):
+                if not re.search(r"RESOURCE_EXHAUSTED|quota|credits|429|usage limit|rate limit|limit reached", str(error), re.I):
                     raise
                 time.sleep(args.quota_wait)
         raise RuntimeError("the quota stayed exhausted")

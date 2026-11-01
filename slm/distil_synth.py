@@ -317,18 +317,39 @@ def _side(anchor, x, y):
     return "below" if dy >= 0 else "above"
 
 
+def _trace(script, session, command):
+    """The script as written, step by step: what each action created, its call with
+    references resolved, and where everything stood after it."""
+    from contract import resolve_action
+
+    live, created, steps = copy.deepcopy(session), {}, []
+    for index, action in enumerate(script["actions"], 1):
+        identifier = "new" if index == 1 else f"new-{index}"
+        call = resolve_action(action, live, created)
+        live.execute(command, call, identifier)
+        if identifier in live.objects():
+            created[index] = identifier
+        steps.append((call, copy.deepcopy(live.objects())))
+    return created, steps
+
+
 def placed(script, session, command):
     """The script with guessed coordinates replaced by placement the app computes.
 
     A small model should not guess pixels: a component goes `near` the object it is wired
-    to (else the nearest object) on the side its guessed position implied, and a shape's
-    guessed x and y are dropped. Coordinates stay when the person says them."""
-    from contract import ReferenceProblem, resolve
-
+    to (else the nearest object), on the side where the teacher's guess put it, and a
+    shape's guessed x and y are dropped. The wiring is read from the script as it runs, so
+    {"last": "created"} and objects made earlier in the same script count. Coordinates
+    stay when the person says them."""
     if COORDINATES.search(command) or not script.get("actions"):
         return script
+    try:
+        created, steps = _trace(script, session, command)
+    except (ValueError, KeyError, TypeError):
+        created, steps = {}, None
+    made_by = {identifier: index for index, identifier in created.items()}
+    names = Counter(o["name"] for o in session.objects().values())
     script = copy.deepcopy(script)
-    objects = session.objects()
     for index, action in enumerate(script["actions"], 1):
         args = action.get("arguments", {})
         if action.get("name") == "create_shape":
@@ -337,36 +358,31 @@ def placed(script, session, command):
         if action.get("name") != "create_component" or not isinstance(args.get("x"), (int, float)) \
                 or not isinstance(args.get("y"), (int, float)):
             continue
-        x, y = args.pop("x"), args.pop("y")
-        if args.get("near"):
+        args.pop("x"), args.pop("y")
+        if args.get("near") or steps is None or index not in created:
             continue
+        me, objects = created[index], steps[index - 1][1]
         partner = None
-        for other in script["actions"]:
-            other_args = other.get("arguments", {})
-            if other.get("name") != "connect_schemas":
-                continue
-            ends = (other_args.get("source_id"), other_args.get("target_id"))
-            if {"new": index} in ends:
-                partner = next((e for e in ends if e != {"new": index}), None)
+        for call, _ in steps[index:]:
+            ends = (call["arguments"].get("source_id"), call["arguments"].get("target_id"))
+            if call["name"] == "connect_schemas" and me in ends:
+                partner = ends[1] if ends[0] == me else ends[0]
                 break
-        anchor = None
-        if isinstance(partner, dict) and "new" not in partner:
-            try:
-                found = resolve(partner, session, {})
-                anchor = objects[found[0]] if len(found) == 1 else None
-            except (ReferenceProblem, ValueError, KeyError):
-                anchor = None
-        if anchor is None:
-            tops = [o for o in objects.values() if o.get("kind") != "arrow"]
-            if not tops:
+        mine = objects[me]
+        center = (mine["x"] + mine["w"] / 2, mine["y"] + mine["h"] / 2)
+        if partner is None:  # not wired: beside whatever the guess put it next to
+            others = [o for o in objects.values() if o["id"] != me and o.get("kind") not in ("arrow", "frame")]
+            if not others:
                 continue
-            anchor = min(tops, key=lambda o: (o["x"] + o["w"] / 2 - x) ** 2 + (o["y"] + o["h"] / 2 - y) ** 2)
-            names = [o for o in objects.values() if o["name"] == anchor["name"]]
-            partner = {"name": anchor["name"]} if len(names) == 1 else None
-            if partner is None:
-                continue
-        args["near"] = partner
-        args["side"] = _side(anchor, x, y)
+            partner = min(others, key=lambda o: (o["x"] + o["w"] / 2 - center[0]) ** 2
+                          + (o["y"] + o["h"] / 2 - center[1]) ** 2)["id"]
+        if made_by.get(partner, index) < index:
+            args["near"] = {"new": made_by[partner]}
+        elif partner in session.objects() and names[session.objects()[partner]["name"]] == 1:
+            args["near"] = {"name": session.objects()[partner]["name"]}
+        else:
+            continue  # made later, or no unique name: the app places it
+        args["side"] = _side(objects[partner], *center)
     return script
 
 
