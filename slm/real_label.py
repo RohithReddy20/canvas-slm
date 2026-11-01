@@ -16,6 +16,11 @@ nothing here feeds training.
         --cli claude --model claude-opus-5-5 --output ../runs/colab/real-v3/opus.jsonl
     python real_label.py build --labels ../runs/colab/real-v3/flash.jsonl \\
         --second ../runs/colab/real-v3/opus.jsonl --output ../runs/colab/real-v3/
+
+The second opinion can also come from a distil labs teacher (an open model, independent of
+the labeller): `export-second` writes the dataset folder, `distil teacher-evaluation
+create-from-dataset --config <folder>/<teacher>.yaml <dataset-id>` runs it, and
+`from-distil` turns the downloaded predictions into the file `build` reads.
 """
 
 import argparse
@@ -158,6 +163,48 @@ def second(args):
     print(json.dumps({"asked": len(todo), "failed": len(failures), "examples": failures[:3]}))
 
 
+def export_second(args):
+    """A distil labs dataset of the applied labels, in the student's view, for an open teacher."""
+    from distil_export import JUDGE_INSTRUCTIONS, TEACHERS, config
+
+    labels = [json.loads(line) for line in open(args.labels) if json.loads(line).get("applied")]
+    dataset = args.output / "dataset"
+    dataset.mkdir(parents=True, exist_ok=True)
+    with open(dataset / "test.jsonl", "w") as test, open(args.output / "index.jsonl", "w") as index:
+        for row in labels:
+            user = student_view(row["answer"]["canvas"], row["text"])
+            test.write(json.dumps({"messages": [{"role": "user", "content": user},
+                                                {"role": "assistant", "content": json.dumps(row["answer"]["script"])}]},
+                                  ensure_ascii=False) + "\n")
+            index.write(json.dumps({"id": row["id"], "user": user}, ensure_ascii=False) + "\n")
+    json.dump({"task_description": GUIDE, "llm_as_a_judge_instructions": JUDGE_INSTRUCTIONS},
+              open(dataset / "job_description.json", "w"), indent=2)
+    for name, teacher in TEACHERS.items():
+        (args.output / f"{name}.yaml").write_text(config(teacher))
+    (dataset / "config.yaml").write_text(config(TEACHERS["deepseek-v4-pro"]))
+    print(json.dumps({"rows": len(labels)}))
+
+
+def from_distil(args):
+    """Downloaded teacher predictions as second opinions keyed by case id."""
+    index = {json.loads(line)["user"]: json.loads(line)["id"] for line in open(args.index)}
+    count = 0
+    with open(args.output, "w") as out:
+        for line in open(args.predictions):
+            item = json.loads(line)
+            prompt = item["prompt"]
+            if isinstance(prompt, list):
+                prompt = next(m["content"] for m in reversed(prompt) if m["role"] == "user")
+            identifier = index.get(prompt) or next((i for u, i in index.items() if u in prompt), None)
+            if identifier is None:
+                continue
+            reply = item["prediction"]
+            text = reply.get("content") or "" if isinstance(reply, dict) else str(reply)
+            out.write(json.dumps({"id": identifier, "model": args.model, "reply": text}, ensure_ascii=False) + "\n")
+            count += 1
+    print(json.dumps({"converted": count}))
+
+
 def apply_reply(canvas, command, text):
     session = session_from(canvas)
     try:
@@ -250,12 +297,21 @@ def main():
     opinion = commands.add_parser("second")
     opinion.add_argument("--labels", type=Path, required=True)
     cli_options(opinion)
+    exporting = commands.add_parser("export-second")
+    exporting.add_argument("--labels", type=Path, required=True)
+    exporting.add_argument("--output", type=Path, required=True)
+    converting = commands.add_parser("from-distil")
+    converting.add_argument("--index", type=Path, required=True)
+    converting.add_argument("--predictions", type=Path, required=True)
+    converting.add_argument("--model", required=True)
+    converting.add_argument("--output", type=Path, required=True)
     building = commands.add_parser("build")
     building.add_argument("--labels", type=Path, required=True)
     building.add_argument("--second", type=Path, nargs="*", default=[])
     building.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    {"label": label, "second": second, "build": build}[args.command](args)
+    {"label": label, "second": second, "export-second": export_second, "from-distil": from_distil,
+     "build": build}[args.command](args)
 
 
 if __name__ == "__main__":
