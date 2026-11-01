@@ -96,6 +96,55 @@ MUTATORS = [
     ]},
 ]
 
+GENERATION_REAL = """Write inputs as they occur when a person asks an assistant to change a diagram the \
+assistant drew for them, as in real chat logs. The diagram is about the person's own subject: \
+a class diagram, database tables, a flowchart, a mind map, a sequence of participants, or a \
+system architecture, with 6 to 25 objects named in that domain (not placeholders), consistent \
+IDs and connections. The message is the person's next turn, and real people write it as they \
+think, not as a command:
+- most messages add something new to the subject and expect it wired where it belongs \
+("Also need discount for student type", "But iCloud and Google Photos are missing on that \
+picture. Could you include them?", "I want to use a businessObject common across all the \
+controller endpoints"); the script creates the object with a sensible name and connects it \
+to the right existing object;
+- many state a fact about the subject and expect the diagram to follow ("the classify() method \
+is of the lib and is called by the consumer", "text to speech gets its input from the user, not \
+from response logic"): the script fixes the arrow, member or label that the fact contradicts;
+- some ask for several related additions at once ("add more objects and arrows to manage \
+pricing, supplier, purchases, product category");
+- some rename, remove, relabel or add a field or method, naming things loosely or with typos;
+- about one in eight asks what no tool can do here (more detail about every topic, a different \
+diagram type, code, an explanation, a rendering error) and gets the refusal.
+Messages are 5 to 30 words, in English, typed quickly: lowercase, missing punctuation, typos \
+and clipped grammar are common. Names on the diagram are English too."""
+
+MUTATORS_REAL = [
+    {"name": "request", "values": [
+        "the message adds one new thing to the subject; the script creates it and wires it to the right object",
+        "the message adds one new thing to the subject; the script creates it and wires it to the right object",
+        "the message adds one new thing, naming the object it attaches to loosely",
+        "the message adds two to four related things and their arrows",
+        "the message states a fact about the subject that the diagram gets wrong; the script fixes the arrow or member",
+        "the message says something is missing from the picture and asks to include it",
+        "the message adds a field or method to a class or table, naming the class loosely",
+        "the message renames or removes something, with a typo or an abbreviation",
+        "the message asks to connect two existing things, in plain words",
+        "the message corrects the assistant's previous change ('no I meant ...')",
+        "the message asks for more detail everywhere, a different diagram, code or an explanation, and gets the refusal",
+        "the message reports a rendering or syntax error and gets the refusal",
+    ]},
+    {"name": "diagram", "values": [
+        "a class diagram from a real project", "a class diagram from a real project",
+        "database tables with fields", "a flowchart of a process", "a flowchart of a process",
+        "a mind map of a topic", "a sequence of participants and messages",
+        "a system architecture with components", "a state machine or activity diagram",
+    ]},
+    {"name": "voice", "values": [
+        "typed quickly, lowercase, little punctuation", "casual English with a typo or two",
+        "plain English", "terse English, a few words", "polite, wordy English", "English as a non-native speaker writes it",
+    ]},
+]
+
 LABELS = {
     "cache": ["Redis Cache", "Session Cache", "CDN Cache"], "queue": ["Job Queue", "Order Queue", "Event Queue"],
     "database": ["Postgres", "Orders DB", "User DB"], "load_balancer": ["Load Balancer"], "cdn": ["CDN"],
@@ -190,6 +239,41 @@ def observed_seed_rows(path, count, rng):
         kinds[kind] += 1
         kept.append({"id": f"observed:{len(kept)}", "kind": kind, "user": user_text(diagram, command),
                      "answer": script_text(script)})
+    return kept, kinds
+
+
+def real_seed_rows(path, count, rng, exclude=()):
+    """Seeds from the verified teacher requests: canvases transcribed from real chats, with
+    real-style messages. Conversations in `exclude` (the test sets) are skipped; at most two
+    rows per source conversation. About 55% create something (the real follow-ups mostly
+    do), the rest split between other atomic and compound edits, and a sixth are refusals."""
+    rows = [json.loads(line) for line in open(path)]
+    rows = [r for r in rows if r.get("verified") and r.get("language") in ("English", "unknown", None)
+            and r["source"].split(":d")[0] not in exclude]
+    rng.shuffle(rows)
+    creates = lambda r: any(a["name"] in ("create_shape", "create_schema_box", "create_component")  # noqa: E731
+                            for a in r["script"].get("actions", []))
+    kind_of = lambda r: "refusal" if not r["script"].get("actions") else ("create" if creates(r) else r["edit_kind"])  # noqa: E731
+    caps = {"refusal": count // 6, "create": round(count * 0.55)}
+    caps["compound"] = caps["atomic"] = (count - caps["refusal"] - caps["create"] + 1) // 2
+    kept, kinds, per_source = [], Counter(), Counter()
+    for row in rows:
+        if len(kept) >= count:
+            break
+        kind = kind_of(row)
+        if kinds[kind] >= caps.get(kind, 0) or per_source[row["source"]] >= 2:
+            continue
+        try:
+            diagram = diagram_of(session_of(row["canvas"]))
+            result, _ = outcome(row["script"], session_of(diagram), row["command"])
+        except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+            continue
+        if result != row["outcome"]:
+            continue
+        kinds[kind] += 1
+        per_source[row["source"]] += 1
+        kept.append({"id": row["id"], "kind": kind, "user": user_text(diagram, row["command"]),
+                     "answer": script_text(row["script"])})
     return kept, kinds
 
 
@@ -441,7 +525,7 @@ def _after(script, session, command):
     return session
 
 
-def config(teacher, target):
+def config(teacher, target, mutators=MUTATORS):
     lines = [
         "base:",
         "  task: question-answering",
@@ -454,7 +538,7 @@ def config(teacher, target):
         f"  train_generation_target: {target}",
         "  mutators:",
     ]
-    for mutator in MUTATORS:
+    for mutator in mutators:
         lines.append(f"    - name: {mutator['name']}")
         lines.append("      values:")
         lines += [f"        - {json.dumps(value)}" for value in mutator["values"]]
@@ -464,7 +548,16 @@ def config(teacher, target):
 
 def export(args):
     rng = random.Random(args.seed)
-    rows, kinds = seed_rows(args.bundle, args.seeds + args.test, rng)
+    if args.profile == "real":
+        exclude = {json.loads(line)["id"].rsplit(":", 1)[0] for path in args.exclude for line in open(path)}
+        rows, kinds = real_seed_rows(args.real_seeds, args.seeds + args.test, rng, exclude)
+        voice, voice_kinds = seed_rows(args.bundle, args.voice_seeds, rng)  # keep every tool in view
+        rows += voice
+        kinds.update({f"voice:{k}": v for k, v in voice_kinds.items()})
+        generation, mutators = GENERATION_REAL, MUTATORS_REAL
+    else:
+        rows, kinds = seed_rows(args.bundle, args.seeds + args.test, rng)
+        generation, mutators = GENERATION, MUTATORS
     rng.shuffle(rows)
     test, rows = rows[: args.test], rows[args.test:]
     if args.observed:  # new-tool seeds on observed canvases, for training only
@@ -481,9 +574,9 @@ def export(args):
                 out.write(json.dumps({"messages": [{"role": "user", "content": item["user"]},
                                                    {"role": "assistant", "content": item["answer"]}]},
                                      ensure_ascii=False) + "\n")
-    json.dump({"task_description": TASK, "synthetic_data_generation_instructions": GENERATION},
+    json.dump({"task_description": TASK, "synthetic_data_generation_instructions": generation},
               open(dataset / "job_description.json", "w"), indent=2, ensure_ascii=False)
-    (dataset / "config.yaml").write_text(config(args.teacher, args.target))
+    (dataset / "config.yaml").write_text(config(args.teacher, args.target, mutators))
     print(json.dumps({"seeds": len(splits["train"]), "test": len(splits["test"]), "kinds": dict(kinds)}))
 
 
@@ -604,6 +697,11 @@ def main():
     making.add_argument("--seed", type=int, default=17)
     making.add_argument("--observed", type=Path, help="observation rows (observe/analyze.py --rows)")
     making.add_argument("--observed-seeds", type=int, default=80)
+    making.add_argument("--profile", choices=("voice", "real"), default="voice",
+                        help="voice: messy spoken edits on system designs; real: follow-ups as in public chats")
+    making.add_argument("--real-seeds", type=Path, help="teach_data requests.jsonl (verified real-style rows)")
+    making.add_argument("--exclude", type=Path, nargs="*", default=[], help="test sets whose conversations are skipped")
+    making.add_argument("--voice-seeds", type=int, default=60, help="real profile: v7 seeds kept for tool coverage")
     checking = commands.add_parser("check")
     checking.add_argument("--input", type=Path, required=True)
     checking.add_argument("--output", type=Path, required=True)
