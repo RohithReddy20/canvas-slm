@@ -184,6 +184,56 @@ verify far more often than compound edits (74% against 27%), so they make up 37%
 teacher's requests, and the model now refuses vague real requests ("can you integrate
 SQL MP database") that the hand-checked labels treat as edits.
 
+### Kimi K3 synthetic data (2026-11-01)
+
+`slm/distil_synth.py` has Kimi K3 (distil labs, $38.88) write 5,064 rows of messy spoken
+edits on system-design canvases, seeded from v7 rows and the observation rig; 4,672 pass
+the replay check and 3,735 also agree with a second model (Gemini, then Claude). The
+retrain scripts5-t4 (48,147 rows, 6.1 hours, free Kaggle), constrained decoding with the
+fuzzy resolver:
+
+| | scripts4 | scripts5 |
+|---|---|---|
+| Dev commands (1,700) | 93.4% | 94.6% |
+| Subset (256) | 91.4% | 96.1% |
+| Sessions, agreement | 54.3% | 95.7% |
+| Sessions, first error turn | 13.5 | 25.5 |
+| Compounds | 95.0% | 96.5% |
+| Held-out teacher requests (137) | 80.3% | 83.9% |
+| Held-out synthetic rows (357) | – | 91.6% |
+| Real, English, v1 key (22) | 3 | 3 |
+| Real, English, reviewed v2 key (19) | 5 | 4 |
+
+Sessions are fixed: the clear-selection wording no longer deletes, and four of eight dev
+sessions replay perfectly. Real follow-ups did not move, and 11 of 19 are still refused.
+
+### The real answer key, reviewed (2026-11-01)
+
+The v1 real cases were labelled by Qwen3.8-27B, the weakest teacher in the comparison, so
+better models were marked wrong for disagreeing with it. Reviewing the 22 English cases
+against their source chats: 2 cannot be answered from the canvas (dropped), 1 had lost the
+box its command corrects (repaired), 16 had several reasonable readings and now carry them
+as accepted alternatives (`real_match.matches`; `"arrow_direction": "any"` for UML
+implements/uses arrows). One v1 key was itself wrong: it deleted every arrow between two
+participants instead of the one named. Under the reviewed key (19 comparable cases):
+
+| Model | v1 key (22) | v2 key (19) |
+|---|---|---|
+| Opus 5.5 | 10 | 14 |
+| Gemini 4 Argon | 7 | 12 |
+| DeepSeek V4 Pro | 7 | 10 |
+| Kimi K3 | 5 | 8 |
+| Qwen3.8-27B | 4 | 7 |
+| scripts4 student | 3 | 5 |
+
+Where the data falls short: 16 of the 19 real cases add a domain-named object to a UML,
+flowchart or mind-map diagram of 10 to 25 nodes and expect it wired in; the Kimi rows are
+mostly styling, text, layout and deletion on 6-node system designs (120 create-and-connect
+rows of 3,735). The next generation round (`distil_synth.py export --profile real`) seeds
+from canvases transcribed from real chats and describes how real users ask; `real_label.py`
+grows the English test set from the mined follow-ups with a strong model proposing, a
+second model answering from the canvas alone, and a human reviewing the disagreements.
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
