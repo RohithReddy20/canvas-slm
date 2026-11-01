@@ -1,0 +1,26 @@
+slm/real_match.py
+  s_e9b3b404ee8816::t_7c09e18af2f9c5 17-21,93,152-153,169-170,173-179
+slm/distil_score.py
+  s_e9b3b404ee8816::t_af0b3a1ead17f6 53-56
+  s_e9b3b404ee8816::t_7c09e18af2f9c5 20,61
+slm/evaluate_scripts.py
+  s_e9b3b404ee8816::t_7c09e18af2f9c5 35,180
+slm/test_real_match.py
+  s_e9b3b404ee8816::t_ec4a477d102ee2 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b7776f6d6a451e3f892d535ee92d584c3ea8f70a",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
