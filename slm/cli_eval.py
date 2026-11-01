@@ -25,15 +25,24 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
+NO_TOOLS = ("Answer directly in your reply. Do not run commands, read or write files, or use any "
+            "tool: headless mode denies them and the reply would be empty.")
+
+
 def ask_agy(model, guide, user, timeout, cwd, ending="Reply with the JSON script only."):
     result = subprocess.run(
         ["agy", "--model", model, "--sandbox", "--disable-slash-commands", "--output-format", "json",
-         "--print-timeout", f"{timeout}s", f"-p={guide}\n\n{user}\n\n{ending}"],
+         "--print-timeout", f"{timeout}s", f"-p={NO_TOOLS}\n\n{guide}\n\n{user}\n\n{ending}"],
         capture_output=True, text=True, timeout=timeout + 60, cwd=cwd,
     )
-    reply = json.loads(result.stdout[result.stdout.find("{"):])
+    start = result.stdout.find("{")
+    if start < 0:
+        raise RuntimeError(result.stderr[-300:] or "agy printed nothing")
+    reply = json.loads(result.stdout[start:])
     if reply.get("status") != "SUCCESS":
         raise RuntimeError(reply.get("error") or result.stdout[-300:])
+    if not reply.get("response", "").strip():  # a tool call was denied, or the model gave up
+        raise RuntimeError(f"empty reply: {reply.get('denied_actions') or result.stderr[-200:]}")
     return reply["response"], reply.get("usage", {})
 
 
