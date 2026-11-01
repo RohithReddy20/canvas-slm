@@ -51,9 +51,11 @@ def english(row):
     return row.get("language") in ("English", None, "unknown") and not OTHER_SCRIPTS.search(row["text"])
 
 
-def calls(ask, model, guide, prompts, ending, batch, workers, timeout, wait, tries):
-    """Ask for every prompt, several per call; yields (prompt, answer_text) as they finish."""
-    lock, results, failures = threading.Lock(), [], []
+def calls(ask, model, guide, prompts, ending, batch, workers, timeout, wait, tries, on_answer):
+    """Ask for every prompt, several per call; `on_answer(prompt, text)` runs as each finishes,
+    under a lock, so a long run keeps what it has when it is interrupted."""
+    lock, failures = threading.Lock(), []
+    done = [0]
 
     def call(text, tail):
         for _ in range(tries):
@@ -83,12 +85,16 @@ def calls(ask, model, guide, prompts, ending, batch, workers, timeout, wait, tri
                 failures.append(str(error)[:200])
             return
         with lock:
-            results.extend(zip(group, answers))
+            for prompt, answer in zip(group, answers):
+                on_answer(prompt, answer)
+            done[0] += len(group)
+            if done[0] % 30 < len(group):
+                print(f"{done[0]}/{len(prompts)} answered, {len(failures)} calls failed", flush=True)
 
     groups = [prompts[i: i + batch] for i in range(0, len(prompts), batch)]
     with ThreadPoolExecutor(workers) as pool:
         list(pool.map(work, groups))
-    return results, failures
+    return failures
 
 
 def label(args):
@@ -105,12 +111,10 @@ def label(args):
         todo = todo[: args.limit]
     by_prompt = {message(r): r for r in todo}
     ask = {"agy": ask_agy, "claude": ask_claude}[args.cli]
-    results, failures = calls(ask, args.model, LABEL_PROMPT, list(by_prompt), "Reply with the JSON object only.",
-                              args.batch, args.workers, args.timeout, args.quota_wait, args.quota_tries)
     counts = Counter()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "a") as out:
-        for prompt, text in results:
+        def keep(prompt, text):
             row = by_prompt[prompt]
             record = {**row, "labeller": args.model}
             try:
@@ -122,6 +126,10 @@ def label(args):
                 record.update(answer=None, parse_error=str(error)[:300], raw=text[:2000])
                 counts["unparsed"] += 1
             out.write(json.dumps(record, ensure_ascii=False) + "\n")
+            out.flush()
+
+        failures = calls(ask, args.model, LABEL_PROMPT, list(by_prompt), "Reply with the JSON object only.",
+                         args.batch, args.workers, args.timeout, args.quota_wait, args.quota_tries, keep)
     print(json.dumps({"asked": len(todo), "failed": len(failures), "examples": failures[:3], **counts}))
 
 
@@ -139,12 +147,14 @@ def second(args):
     todo = [r for r in todo if r["id"] not in done]
     by_prompt = {student_view(r["answer"]["canvas"], r["text"]): r for r in todo}
     ask = {"agy": ask_agy, "claude": ask_claude}[args.cli]
-    results, failures = calls(ask, args.model, GUIDE, list(by_prompt), "Reply with the JSON script only.",
-                              args.batch, args.workers, args.timeout, args.quota_wait, args.quota_tries)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "a") as out:
-        for prompt, text in results:
+        def keep(prompt, text):
             out.write(json.dumps({"id": by_prompt[prompt]["id"], "model": args.model, "reply": text}, ensure_ascii=False) + "\n")
+            out.flush()
+
+        failures = calls(ask, args.model, GUIDE, list(by_prompt), "Reply with the JSON script only.",
+                         args.batch, args.workers, args.timeout, args.quota_wait, args.quota_tries, keep)
     print(json.dumps({"asked": len(todo), "failed": len(failures), "examples": failures[:3]}))
 
 
