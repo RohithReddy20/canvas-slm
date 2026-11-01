@@ -1,0 +1,21 @@
+slm/real_match.py
+  s_e9b3b404ee8816::t_a94ee9fc47406f 200-202,204
+slm/test_real_match.py
+  s_e9b3b404ee8816::t_183c7ec90c4b42 35-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2a07b888a98cddc5bc09d05dc395c91ce60fe9b7",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
