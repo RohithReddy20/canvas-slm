@@ -41,7 +41,13 @@ if [ -f "${TEACHER:-}" ]; then
 fi
 PREPARE=(--data "$DATA" --output "$RUNS/scripts-data")
 [ -z "${TEACHER:-}" ] || PREPARE+=(--teacher "$TEACHER")
-# SYNTHETIC, when set, is distil_synth.py's agreed rows (JSONL) to train on as well.
+# SYNTHETIC, when set, is distil_synth.py's agreed rows (JSONL, or .jsonl.xz to fit
+# Kaggle's small inputs) to train on as well.
+if [[ "${SYNTHETIC:-}" == *.xz ]]; then
+  python3 -c 'import lzma, shutil, sys; shutil.copyfileobj(lzma.open(sys.argv[1]), open(sys.argv[2], "wb"))' \
+    "$SYNTHETIC" "$WORK/synthetic.jsonl"
+  SYNTHETIC=$WORK/synthetic.jsonl
+fi
 [ -z "${SYNTHETIC:-}" ] || PREPARE+=(--synthetic "$SYNTHETIC")
 [ -f "$RUNS/scripts-data/train.jsonl" ] || "$TRAIN" prepare_scripts.py "${PREPARE[@]}"
 cat "$RUNS/scripts-data/summary.json"
