@@ -1,0 +1,23 @@
+slm/cli_eval.py
+  s_33235c4d0ba77c::t_41851f016e4d70 82
+slm/distil_synth.py
+  s_33235c4d0ba77c::t_0a6f0af3af6306 320-335,340-343,346-351,361-362,364,366-369,371-375,377-385
+slm/test_extensions.py
+  s_33235c4d0ba77c::t_c8558c81f4ea12 69-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "333ddda82cd85602741fb048a6cc1445189a1dce",
+  "prompts": {},
+  "sessions": {
+    "s_33235c4d0ba77c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8ea6ad04-f198-45d5-9699-1bd94169bea3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
