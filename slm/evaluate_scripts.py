@@ -167,6 +167,8 @@ def compounds(model, rows, constrained=False, fuzzy=False):
 
 
 def real(model, rows, constrained=False, fuzzy=False):
+    from teach_data import json_reply  # teach_data imports this module
+
     texts = model.scripts(
         [messages(r["command"], session_from(r["canvas"])) for r in rows], constrained
     )
@@ -175,9 +177,14 @@ def real(model, rows, constrained=False, fuzzy=False):
         session = session_from(row["canvas"])
         outcome = apply(text, session, row["command"], "new", fuzzy)
         before = semantic_state(session_from(row["canvas"]))
+        try:
+            script = parse_script(json.dumps(json_reply(text)))
+        except (ValueError, KeyError, TypeError, IndexError, AttributeError):
+            script = None
         results.append({"id": row["id"], "language": row["language"], "edit_kind": row["edit_kind"],
+                        "expect": row.get("expect", "edit"),
                         "outcome": outcome, "correct": semantic_state(session) == row["after"],
-                        "relaxed": matches(row, before, semantic_state(session)),
+                        "relaxed": matches(row, before, semantic_state(session), script),
                         "reply": text[:600]})
     by = lambda key: {  # noqa: E731
         value: f"{sum(r['correct'] for r in results if r[key] == value)}/{sum(r[key] == value for r in results)}"
@@ -186,6 +193,8 @@ def real(model, rows, constrained=False, fuzzy=False):
     return {"total": len(rows), "content_accuracy": sum(r["correct"] for r in results) / len(rows),
             "relaxed_accuracy": sum(r["relaxed"] for r in results) / len(rows),
             "by_kind": by("edit_kind"), "by_language": by("language"),
+            "by_expect": {value: f"{sum(r['relaxed'] for r in results if r['expect'] == value)}/{sum(r['expect'] == value for r in results)}"
+                          for value in sorted({r["expect"] for r in results})},
             "outcomes": dict(Counter(r["outcome"] for r in results)), "cases": results}
 
 

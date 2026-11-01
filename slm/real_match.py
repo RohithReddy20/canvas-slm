@@ -172,8 +172,56 @@ def relaxed(before, predicted, gold, command, directed=True):
     return True
 
 
-def matches(row, before, predicted):
-    """Whether `predicted` makes the edit of the row's primary or any accepted outcome."""
+def _names(state):
+    return Counter(_key(o["name"]) for o in _objects(state))
+
+
+def additive(before, predicted, anchors=(), min_new=1):
+    """A request for more content ("add more detail", "expand X"): nothing is removed, at least
+    `min_new` objects are added, and when `anchors` are named, some new arrow joins one of them."""
+    old_names, new_names = _names(before), _names(predicted)
+    if old_names - new_names:  # an object disappeared
+        return False
+    old_links = Counter((_key(a), _key(b)) for a, b, _ in before["connections"])
+    new_links = Counter((_key(a), _key(b)) for a, b, _ in predicted["connections"])
+    if old_links - new_links:  # an arrow disappeared
+        return False
+    added = sum((new_names - old_names).values())
+    if added < min_new:
+        return False
+    if anchors:
+        fresh = set((new_names - old_names).elements())
+        wanted = {_key(a) for a in anchors}
+        return any((a in wanted and b in fresh) or (b in wanted and a in fresh) for a, b in (new_links - old_links).elements())
+    return True
+
+
+def restyle(before, predicted):
+    """Only looks change: the same objects and arrows, with at least one colour or fill different."""
+    if _names(before) != _names(predicted):
+        return False
+    old_links = Counter((_key(a), _key(b), _key(c)) for a, b, c in before["connections"])
+    new_links = Counter((_key(a), _key(b), _key(c)) for a, b, c in predicted["connections"])
+    if old_links != new_links:
+        return False
+    return sorted(o["style"] for o in _objects(before)) != sorted(o["style"] for o in _objects(predicted))
+
+
+def matches(row, before, predicted, script=None):
+    """Whether `predicted` passes the row: the edit of its primary or any accepted outcome, or,
+    by the row's "expect", a refusal (nothing changes), an additive edit, a restyle, or a
+    layout (judged by the script, since positions are not part of the state)."""
+    expect = row.get("expect", "edit")
+    if expect == "refusal":
+        return predicted == before
+    if expect == "additive":
+        return additive(before, predicted, row.get("anchors") or (), row.get("min_new", 1))
+    if expect == "restyle":
+        return restyle(before, predicted)
+    if expect == "layout":
+        actions = (script or {}).get("actions") or []
+        return any(a.get("name") == "auto_layout" and a.get("arguments", {}).get("direction") == row.get("layout")
+                   for a in actions) and predicted == before
     directed = row.get("arrow_direction") != "any"
     return any(relaxed(before, predicted, gold, row["command"], directed)
                for gold in [row["after"], *row.get("accepted", [])])

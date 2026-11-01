@@ -143,10 +143,22 @@ def student_view(canvas, command):
     return messages(command, session_from(canvas))[1]["content"]
 
 
+def viewable(rows):
+    """Rows whose canvas the app can hold (it caps shapes at 60); the rest are no test cases."""
+    kept = []
+    for row in rows:
+        try:
+            student_view(row["answer"]["canvas"], row["text"])
+            kept.append(row)
+        except Exception:  # noqa: BLE001  pydantic limits, bad ids
+            pass
+    return kept
+
+
 def second(args):
     """A second model writes the script from the canvas and message alone."""
     labels = [json.loads(line) for line in open(args.labels)]
-    todo = [r for r in labels if r.get("applied")]
+    todo = viewable([r for r in labels if r.get("applied")])
     done = set()
     if args.output.exists():
         done = {json.loads(line)["id"] for line in open(args.output)}
@@ -164,11 +176,51 @@ def second(args):
     print(json.dumps({"asked": len(todo), "failed": len(failures), "examples": failures[:3]}))
 
 
+ADDITIVE_GUIDE = """You help build a test for a diagram-editing assistant. The input is a canvas and a \
+user's message that asks for more content than it spells out ("add more detail", "expand X", \
+"add the steps I mentioned"). Such a request has many right answers, so the test only checks \
+the shape of the edit. Decide:
+- kind: "add" when a right answer adds objects (and arrows) and removes nothing; "restyle" when \
+it only changes colours, fills or text of existing objects; "skip" when no canvas edit could \
+satisfy it (it needs information that is not in the message or the canvas, or restructures \
+the whole diagram).
+- anchors: for "add", the names (exactly as on the canvas) of existing objects the new content \
+should be connected to; [] when it may attach anywhere.
+- min_new: for "add", the smallest number of new objects a serious answer would add (1 to 6).
+Reply with JSON only: {"kind": ..., "anchors": [...], "min_new": n, "why": "one sentence"}."""
+
+
+def additive(args):
+    """Opus proposes the pass criteria for high-level requests: anchors and a minimum of new objects."""
+    labels = [json.loads(line) for line in open(args.labels)]
+    todo = viewable([r for r in labels if (r.get("answer") or {}).get("edit_kind") == "high_level" and r["answer"].get("canvas")])
+    done = set()
+    if args.output.exists():
+        done = {json.loads(line)["id"] for line in open(args.output)}
+    todo = [r for r in todo if r["id"] not in done]
+    by_prompt = {student_view(r["answer"]["canvas"], r["text"]): r for r in todo}
+    ask = {"agy": ask_agy, "claude": ask_claude}[args.cli]
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with open(args.output, "a") as out:
+        def keep(prompt, text):
+            row = by_prompt[prompt]
+            try:
+                answer = json.loads(text[text.find("{"): text.rfind("}") + 1])
+            except (ValueError, json.JSONDecodeError):
+                answer = {"kind": "skip", "why": "unparsed: " + text[:200]}
+            out.write(json.dumps({"id": row["id"], "model": args.model, **answer}, ensure_ascii=False) + "\n")
+            out.flush()
+
+        failures = calls(ask, args.model, ADDITIVE_GUIDE, list(by_prompt), "Reply with the JSON object only.",
+                         args.batch, args.workers, args.timeout, args.quota_wait, args.quota_tries, keep)
+    print(json.dumps({"asked": len(todo), "failed": len(failures), "examples": failures[:3]}))
+
+
 def export_second(args):
     """A distil labs dataset of the applied labels, in the student's view, for an open teacher."""
     from distil_export import JUDGE_INSTRUCTIONS, TEACHERS, config
 
-    labels = [json.loads(line) for line in open(args.labels) if json.loads(line).get("applied")]
+    labels = viewable([json.loads(line) for line in open(args.labels) if json.loads(line).get("applied")])
     dataset = args.output / "dataset"
     dataset.mkdir(parents=True, exist_ok=True)
     with open(dataset / "test.jsonl", "w") as test, open(args.output / "index.jsonl", "w") as index:
@@ -298,6 +350,9 @@ def main():
     opinion = commands.add_parser("second")
     opinion.add_argument("--labels", type=Path, required=True)
     cli_options(opinion)
+    criteria = commands.add_parser("additive")
+    criteria.add_argument("--labels", type=Path, required=True)
+    cli_options(criteria)
     exporting = commands.add_parser("export-second")
     exporting.add_argument("--labels", type=Path, required=True)
     exporting.add_argument("--output", type=Path, required=True)
@@ -311,8 +366,8 @@ def main():
     building.add_argument("--second", type=Path, nargs="*", default=[])
     building.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    {"label": label, "second": second, "export-second": export_second, "from-distil": from_distil,
-     "build": build}[args.command](args)
+    {"label": label, "second": second, "additive": additive, "export-second": export_second,
+     "from-distil": from_distil, "build": build}[args.command](args)
 
 
 if __name__ == "__main__":

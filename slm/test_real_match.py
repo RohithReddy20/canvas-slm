@@ -21,3 +21,21 @@ def test_any_accepted_outcome_passes():
     assert matches(row, BEFORE, FIELD)
     assert not matches(row, BEFORE, B_TO_A)
     assert matches({**row, "arrow_direction": "any"}, BEFORE, B_TO_A)
+
+
+def test_additive_restyle_layout_and_refusal():
+    from real_match import additive, restyle
+
+    added = {**BEFORE, "boxes": BEFORE["boxes"] + [["C", [], [], "black", "none"]], "connections": [["A", "C", ""]]}
+    assert additive(BEFORE, added, anchors=["A"], min_new=1)
+    assert not additive(BEFORE, added, anchors=["B"], min_new=1)  # wired to the wrong object
+    assert not additive(BEFORE, added, min_new=2)
+    assert not additive(A_TO_B, BEFORE)  # removed an arrow
+    red = {**BEFORE, "boxes": [["A", [], [], "red", "none"], ["B", [], [], "black", "none"]]}
+    assert restyle(BEFORE, red) and not restyle(BEFORE, added) and not restyle(BEFORE, BEFORE)
+    assert matches({"command": "x", "after": BEFORE, "expect": "refusal"}, BEFORE, BEFORE)
+    assert not matches({"command": "x", "after": BEFORE, "expect": "refusal"}, BEFORE, red)
+    layout = {"command": "x", "after": BEFORE, "expect": "layout", "layout": "left_to_right"}
+    script = {"actions": [{"name": "auto_layout", "arguments": {"direction": "left_to_right"}}]}
+    assert matches(layout, BEFORE, BEFORE, script)
+    assert not matches(layout, BEFORE, BEFORE, {"actions": []})
