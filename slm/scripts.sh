@@ -81,8 +81,10 @@ echo "== evaluate"
 uv pip install -q --python "$WORK/vllm-env/bin/python" "vllm==0.30.0" "pydantic>=2.12,<3"
 # vLLM compiles kernels on first use with the environment's own ninja.
 export PATH=$WORK/vllm-env/bin:$PATH
+# The reviewed answer key (real-test-v2.jsonl, with accepted alternatives) when it was uploaded.
+REAL="$INPUT/real-test-v1.jsonl"; [ -f "$INPUT/real-test-v2.jsonl" ] && REAL="$INPUT/real-test-v2.jsonl"
 EVALUATION=(evaluate_scripts.py --model "$OUT/merged" --data "$DATA"
-  --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real "$INPUT/real-test-v1.jsonl"
+  --compounds "$RUNS/scripts-data/dev-compounds.jsonl" --real "$REAL"
   --requests "$RUNS/scripts-data/dev-requests.jsonl" --synthetic "$RUNS/scripts-data/dev-synthetic.jsonl")
 if [ "$GPUS" -gt 1 ]; then
   # Free and constrained decoding share no generations, so each gets a GPU.
