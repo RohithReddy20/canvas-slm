@@ -32,7 +32,9 @@ def test_additive_restyle_layout_and_refusal():
     assert not additive(BEFORE, added, min_new=2)
     assert not additive(A_TO_B, BEFORE)  # removed an arrow
     red = {**BEFORE, "boxes": [["A", [], [], "red", "none"], ["B", [], [], "black", "none"]]}
-    assert restyle(BEFORE, red) and not restyle(BEFORE, added) and not restyle(BEFORE, BEFORE)
+    renamed = {**BEFORE, "boxes": [["A", [], [], "black", "none"], ["Bee", [], [], "black", "none"]]}
+    assert restyle(BEFORE, red) and restyle(BEFORE, renamed)
+    assert not restyle(BEFORE, added) and not restyle(BEFORE, BEFORE)
     assert matches({"command": "x", "after": BEFORE, "expect": "refusal"}, BEFORE, BEFORE)
     assert not matches({"command": "x", "after": BEFORE, "expect": "refusal"}, BEFORE, red)
     layout = {"command": "x", "after": BEFORE, "expect": "layout", "layout": "left_to_right"}

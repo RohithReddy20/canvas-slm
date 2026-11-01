@@ -197,14 +197,11 @@ def additive(before, predicted, anchors=(), min_new=1):
 
 
 def restyle(before, predicted):
-    """Only looks change: the same objects and arrows, with at least one colour or fill different."""
-    if _names(before) != _names(predicted):
+    """Only looks or wording change: no object or arrow added or removed, and something (a
+    colour, a fill, a text, a member or a label) is different."""
+    if len(_objects(before)) != len(_objects(predicted)) or len(before["connections"]) != len(predicted["connections"]):
         return False
-    old_links = Counter((_key(a), _key(b), _key(c)) for a, b, c in before["connections"])
-    new_links = Counter((_key(a), _key(b), _key(c)) for a, b, c in predicted["connections"])
-    if old_links != new_links:
-        return False
-    return sorted(o["style"] for o in _objects(before)) != sorted(o["style"] for o in _objects(predicted))
+    return before != predicted
 
 
 def matches(row, before, predicted, script=None):
