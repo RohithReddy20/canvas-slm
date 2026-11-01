@@ -1,0 +1,23 @@
+slm/distil_score.py
+  s_e9b3b404ee8816::t_d9f6d71065048e 21,27
+slm/real_label.py
+  s_e9b3b404ee8816::t_d9f6d71065048e 39,212
+slm/distil_synth.py
+  s_e9b3b404ee8816::t_d9f6d71065048e 118-120,622-642,694
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "238008c9b53407cfe277a604a5ffb6154c01ddf4",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
