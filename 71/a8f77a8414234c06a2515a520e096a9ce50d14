@@ -1,0 +1,19 @@
+slm/real_label.py
+  s_e9b3b404ee8816::t_4884835ae33fff 19-23,166-207,300-307,313-314
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71a8f77a8414234c06a2515a520e096a9ce50d14",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
