@@ -680,7 +680,7 @@ def agree(args):
             prompt = next(m["content"] for m in reversed(prompt) if m["role"] == "user")
         reply = item["prediction"]
         replies[prompt] = reply.get("content") or "" if isinstance(reply, dict) else reply
-    counts, kept, disagreements = Counter(), [], []
+    counts, kept, fixed, disagreements = Counter(), [], [], []
     for line in open(args.input):
         item = json.loads(line)
         text = replies.get(user_text(item["diagram"], item["command"]))
@@ -691,9 +691,10 @@ def agree(args):
         mine, theirs = copy.deepcopy(base), copy.deepcopy(base)
         first = run_script(item["script"], mine, item["command"], "new") or "applied"
         try:
-            second = run_script(parse_script(json.dumps(zero_based(json_reply(text)))), theirs, item["command"], "new") or "applied"
+            script = placed(parse_script(json.dumps(zero_based(json_reply(text)))), session_of(item["diagram"]), item["command"])
+            second = run_script(script, theirs, item["command"], "new") or "applied"
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
-            second = "invalid"
+            script, second = None, "invalid"
         if first == second and same_edit(mine, theirs, base):
             counts["agree"] += 1
             kept.append(item)
@@ -701,9 +702,19 @@ def agree(args):
             counts["disagree"] += 1
             disagreements.append({"command": item["command"], "first": first, "second": second,
                                   "script": script_text(item["script"]), "reply": text[:600]})
+            # The user accepted the terms risk (2026-11-02): the second model's own script
+            # becomes the row's label, kept apart and marked with its author.
+            if args.fix_with_second and script is not None and second != "invalid" and \
+                    (script["actions"] or second == "unsupported_request"):
+                fixed.append({**item, "script": script, "outcome": second, "author": args.fix_with_second})
+                counts["fixed"] += 1
     with open(args.output, "w") as out:
         for item in kept:
             out.write(json.dumps(item, ensure_ascii=False) + "\n")
+    if args.fix_with_second:
+        with open(args.output.with_name(args.output.stem + ".fixed.jsonl"), "w") as out:
+            for item in fixed:
+                out.write(json.dumps(item, ensure_ascii=False) + "\n")
     json.dump(disagreements, open(args.output.with_suffix(".disagreements.json"), "w"), indent=2, ensure_ascii=False)
     print(json.dumps(counts))
 
@@ -736,6 +747,9 @@ def main():
     agreeing.add_argument("--input", type=Path, required=True)
     agreeing.add_argument("--predictions", type=Path, required=True)
     agreeing.add_argument("--output", type=Path, required=True)
+    agreeing.add_argument("--fix-with-second", metavar="AUTHOR",
+                          help="also write <output>.fixed.jsonl: disagreed rows relabelled with the second "
+                               "model's script, marked with this author (the user accepted the terms risk)")
     args = parser.parse_args()
     {"export": export, "check": check, "second-opinion": second_opinion, "agree": agree}[args.command](args)
 
