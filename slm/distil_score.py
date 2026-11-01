@@ -17,7 +17,7 @@ from pathlib import Path
 from contract import semantic_state, session_from
 from convert import session_for
 from evaluate_scripts import apply
-from real_match import relaxed
+from real_match import matches
 from teach_data import json_reply
 
 
@@ -50,12 +50,15 @@ def score(path, index, dev, real):
                 gold.execute(row["command"], row["expected"], "new")
             correct = predicted.snapshot() == gold.snapshot()
         else:
-            row = real[entry["id"]]
+            row = real.get(entry["id"])
+            if row is None or row.get("canvas_changed"):  # dropped by review, or asked on an older canvas
+                outcomes["not_comparable"] += 1
+                continue
             predicted = session_from(row["canvas"])
             outcome = apply(text, predicted, row["command"], "new")
             correct = semantic_state(predicted) == row["after"]
             before = semantic_state(session_from(row["canvas"]))
-            loose = relaxed(before, semantic_state(predicted), row["after"], row["command"])
+            loose = matches(row, before, semantic_state(predicted))
             totals["real_relaxed"] += loose
             english = row["language"] in ("English", "unknown")  # the product is English-only
             totals["real_en"] += english

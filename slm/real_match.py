@@ -14,6 +14,11 @@ given fields. `relaxed` accepts a prediction that makes the same edit as the gol
 - every arrow the gold adds is there, labelled alike when the command quotes the label, in the
   same direction unless it wires up a new object; extra arrows are allowed only when they
   wire up a new object.
+
+A real request often has several right answers. A test row carries the reviewed primary
+outcome in "after" and the other acceptable outcomes in "accepted"; `matches` passes a
+prediction that makes any of them. A row with "arrow_direction": "any" (UML "implements"
+and "uses" arrows, whose direction is convention) ignores arrow direction.
 """
 
 import re
@@ -85,7 +90,7 @@ def _pair_members(gold, predicted):
     return True
 
 
-def relaxed(before, predicted, gold, command):
+def relaxed(before, predicted, gold, command, directed=True):
     """True when `predicted` (a semantic_state) makes the edit `gold` makes to `before`."""
     base = _objects(before)
     kept_g, added_g, removed_g = _split(base, _objects(gold))
@@ -144,7 +149,8 @@ def relaxed(before, predicted, gold, command):
     new_objects = {_key(p["name"]) for p in added_p}
 
     def undirected(counter):  # an arrow to a new object may point either way
-        return Counter({(tuple(sorted(pair)) if set(pair) & new_objects else pair): n for pair, n in counter.items()})
+        return Counter({(tuple(sorted(pair)) if not directed or set(pair) & new_objects else pair): n
+                        for pair, n in counter.items()})
 
     old = links(before)
     gold_links, my_links = undirected(links(gold, names)), undirected(links(predicted))
@@ -160,6 +166,14 @@ def relaxed(before, predicted, gold, command):
     for a, b, label in gold["connections"]:
         if len(_key(label)) >= 3 and _key(label) in _key(command):  # the command quotes the label
             pair = (names.get(_key(a), _key(a)), names.get(_key(b), _key(b)))
-            if not any((_key(x), _key(y)) == pair and similar(lab, label) for x, y, lab in predicted["connections"]):
+            if not any(((_key(x), _key(y)) == pair or (not directed and (_key(y), _key(x)) == pair)) and similar(lab, label)
+                       for x, y, lab in predicted["connections"]):
                 return False
     return True
+
+
+def matches(row, before, predicted):
+    """Whether `predicted` makes the edit of the row's primary or any accepted outcome."""
+    directed = row.get("arrow_direction") != "any"
+    return any(relaxed(before, predicted, gold, row["command"], directed)
+               for gold in [row["after"], *row.get("accepted", [])])

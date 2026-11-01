@@ -32,7 +32,7 @@ from contract import (
     session_from,
 )
 from convert import session_for
-from real_match import relaxed
+from real_match import matches
 from sessions import CanvasSession
 
 FAILURES = (ValueError, IndexError, KeyError, TypeError, AttributeError)
@@ -177,7 +177,7 @@ def real(model, rows, constrained=False, fuzzy=False):
         before = semantic_state(session_from(row["canvas"]))
         results.append({"id": row["id"], "language": row["language"], "edit_kind": row["edit_kind"],
                         "outcome": outcome, "correct": semantic_state(session) == row["after"],
-                        "relaxed": relaxed(before, semantic_state(session), row["after"], row["command"]),
+                        "relaxed": matches(row, before, semantic_state(session)),
                         "reply": text[:600]})
     by = lambda key: {  # noqa: E731
         value: f"{sum(r['correct'] for r in results if r[key] == value)}/{sum(r[key] == value for r in results)}"
