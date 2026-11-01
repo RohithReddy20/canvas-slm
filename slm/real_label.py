@@ -268,43 +268,67 @@ def apply_reply(canvas, command, text):
 
 
 def build(args):
-    """Accepted cases, refusal cases, and a review file for the disagreements."""
-    labels = [json.loads(line) for line in open(args.labels)]
+    """Test cases from the labels: concrete edits (with second opinions), layout requests,
+    additive and restyle requests (criteria from `additive`), and a stratified sample of
+    refusals. Disagreements on concrete edits go to a review file."""
+    import random
+
+    labels = viewable([r for r in (json.loads(line) for line in open(args.labels)) if (r.get("answer") or {}).get("canvas")])
     seconds = {}
     for path in args.second:
         for line in open(path):
             item = json.loads(line)
             seconds.setdefault(item["id"], []).append(item)
+    criteria = {}
+    for path in args.criteria:
+        for line in open(path):
+            item = json.loads(line)
+            criteria[item["id"]] = item
     args.output.mkdir(parents=True, exist_ok=True)
-    counts, accepted, review = Counter(), [], []
-    for row in labels:
-        answer = row.get("answer")
-        if not answer or not answer.get("canvas"):
-            counts["no_canvas"] += 1
-            continue
-        case = {"id": row["id"], "language": row.get("language") or "unknown", "kinds": row.get("kinds"),
+    counts, accepted, review, refusals = Counter(), [], [], []
+
+    def case(row, **extra):
+        answer = row["answer"]
+        before = semantic_state(session_from(answer["canvas"]))
+        return {"id": row["id"], "language": row.get("language") or "unknown", "kinds": row.get("kinds"),
                 "command": row["text"], "canvas": answer["canvas"], "category": answer["category"],
                 "edit_kind": answer.get("edit_kind"), "source": f"real follow-up; labelled by {row['labeller']}",
-                "labeller_reason": answer.get("reason")}
+                "labeller_reason": answer.get("reason"), "before": before, "after": before, "accepted": [],
+                "script": {"actions": []}, **extra}
+
+    for row in labels:
+        answer = row["answer"]
         if answer["category"] in REFUSED:
-            try:
-                before = semantic_state(session_from(answer["canvas"]))
-            except (KeyError, TypeError, ValueError, AttributeError):
-                counts["bad_canvas"] += 1
+            refusals.append(case(row, expect="refusal", script={"actions": [], "reason": answer["category"]}))
+            continue
+        if answer.get("edit_kind") == "high_level":
+            crit = criteria.get(row["id"])
+            if not crit or crit.get("kind") == "skip":
+                counts["high_level_skipped"] += 1
                 continue
-            case.update(after=before, accepted=[], script={"actions": [], "reason": answer["category"]},
-                        expect="refusal")
-            accepted.append(case)
-            counts["refusal"] += 1
+            if crit["kind"] == "restyle":
+                accepted.append(case(row, expect="restyle", criteria_why=crit.get("why")))
+                counts["restyle"] += 1
+            else:
+                anchors = [a for a in crit.get("anchors") or [] if isinstance(a, str)]
+                accepted.append(case(row, expect="additive", anchors=anchors,
+                                     min_new=max(1, min(6, int(crit.get("min_new") or 1))), criteria_why=crit.get("why")))
+                counts["additive"] += 1
             continue
+        script = answer.get("script") or {}
+        actions = script.get("actions") or []
         if not row.get("applied"):
-            counts["edit_not_applied:" + str(answer.get("edit_kind"))] += 1
+            if row.get("error") == "no visible change" and len(actions) == 1 and actions[0]["name"] == "auto_layout":
+                accepted.append(case(row, expect="layout", layout=actions[0]["arguments"].get("direction"), script=script))
+                counts["layout"] += 1
+            else:
+                counts["edit_not_applied"] += 1
             continue
-        case.update(script=answer["script"], after=row["after"], accepted=[], expect="edit")
+        item = case(row, expect="edit", script=script, after=row["after"])
         opinions = seconds.get(row["id"], [])
         if not opinions:
+            review.append({**item, "second": None, "why": "no second opinion"})
             counts["no_second"] += 1
-            review.append({**case, "second": None, "why": "no second opinion"})
             continue
         states, verdicts = [], []
         for opinion in opinions:
@@ -313,19 +337,29 @@ def build(args):
             states.append(state)
             verdicts.append({"model": opinion["model"], "outcome": outcome, "agree": agree, "reply": opinion["reply"][:1500]})
         if all(v["agree"] for v in verdicts):
-            case["accepted"] = [s for s in states if s != row["after"]]
-            accepted.append(case)
+            item["accepted"] = [s for s in states if s != row["after"]]
+            accepted.append(item)
             counts["agreed"] += 1
         else:
-            review.append({**case, "second": verdicts, "why": "second opinion made a different edit"})
+            review.append({**item, "second": verdicts, "why": "second opinion made a different edit"})
             counts["disagreed"] += 1
+    rng = random.Random(args.seed)
+    by_category = {}
+    for item in refusals:
+        by_category.setdefault(item["category"], []).append(item)
+    share = {"other": 0.4, "new_diagram": 0.25, "fix_error": 0.15, "unsupported_edit": 0.2}
+    for category, items in by_category.items():
+        rng.shuffle(items)
+        take = items[: round(args.refusals * share.get(category, 0.1))]
+        accepted.extend(take)
+        counts[f"refusal:{category}"] += len(take)
     with open(args.output / "accepted.jsonl", "w") as out:
-        for case in accepted:
-            out.write(json.dumps(case, ensure_ascii=False) + "\n")
+        for item in accepted:
+            out.write(json.dumps(item, ensure_ascii=False) + "\n")
     with open(args.output / "review.jsonl", "w") as out:
-        for case in review:
-            out.write(json.dumps(case, ensure_ascii=False) + "\n")
-    print(json.dumps(counts))
+        for item in review:
+            out.write(json.dumps(item, ensure_ascii=False) + "\n")
+    print(json.dumps({"accepted": len(accepted), "review": len(review), **counts}))
 
 
 def main():
@@ -364,6 +398,9 @@ def main():
     building = commands.add_parser("build")
     building.add_argument("--labels", type=Path, required=True)
     building.add_argument("--second", type=Path, nargs="*", default=[])
+    building.add_argument("--criteria", type=Path, nargs="*", default=[], help="output of `additive`")
+    building.add_argument("--refusals", type=int, default=60, help="refusal cases to sample")
+    building.add_argument("--seed", type=int, default=7)
     building.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     {"label": label, "second": second, "additive": additive, "export-second": export_second,
