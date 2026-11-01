@@ -36,6 +36,7 @@ from pathlib import Path
 
 from cli_eval import ask_agy, ask_claude
 from contract import messages, run_script, semantic_state, session_from
+from distil_synth import zero_based
 from real_match import relaxed
 from teach import PROMPT, check, message, parse
 from teach_data import GUIDE, json_reply
@@ -208,7 +209,7 @@ def from_distil(args):
 def apply_reply(canvas, command, text):
     session = session_from(canvas)
     try:
-        refused = run_script(json_reply(text), session, command, "new")
+        refused = run_script(zero_based(json_reply(text)), session, command, "new")
     except (ValueError, KeyError, TypeError, IndexError, AttributeError) as error:
         return None, f"invalid: {str(error)[:120]}"
     return semantic_state(session), refused or "applied"

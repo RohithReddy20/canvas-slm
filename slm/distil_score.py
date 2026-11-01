@@ -18,12 +18,13 @@ from contract import semantic_state, session_from
 from convert import session_for
 from evaluate_scripts import apply
 from real_match import matches
+from distil_synth import zero_based
 from teach_data import json_reply
 
 
 def lenient(text):
     try:
-        return json.dumps(json_reply(text))
+        return json.dumps(zero_based(json_reply(text)))
     except ValueError:
         return text
 

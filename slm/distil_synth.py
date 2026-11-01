@@ -115,6 +115,9 @@ pricing, supplier, purchases, product category");
 - some rename, remove, relabel or add a field or method, naming things loosely or with typos;
 - about one in eight asks what no tool can do here (more detail about every topic, a different \
 diagram type, code, an explanation, a rendering error) and gets the refusal.
+When a step is added between or before or after connected steps ("add a review step between \
+A and B", "insert X before Y"), the script deletes the old arrow and adds the two new ones, so \
+the flow runs through the new step; "a decision before X" likewise reroutes the arrow into X.
 Messages are 5 to 30 words, in English, typed quickly: lowercase, missing punctuation, typos \
 and clipped grammar are common. Names on the diagram are English too."""
 
@@ -616,6 +619,27 @@ def check(args):
     print(json.dumps({"kept": len(kept), **counts}))
 
 
+def zero_based(script):
+    """A reply that counts new objects from 0 (`{"new": 0}` appears), renumbered from 1.
+
+    The guide says {"new": 2} is the object action 2 creates; some checkers read that as a
+    0-based index. Their reply is still the same edit, so the check reads it that way."""
+    def refs(node):
+        if isinstance(node, dict):
+            if set(node) == {"new"} and isinstance(node["new"], int):
+                yield node
+            for value in node.values():
+                yield from refs(value)
+        elif isinstance(node, list):
+            for item in node:
+                yield from refs(item)
+    found = list(refs(script))
+    if any(ref["new"] == 0 for ref in found):
+        for ref in found:
+            ref["new"] += 1
+    return script
+
+
 def same_edit(first, second, base):
     """Whether two sessions hold the same result of one edit: content, positions and sizes of
     the objects that were already there, the camera and the selected names."""
@@ -667,7 +691,7 @@ def agree(args):
         mine, theirs = copy.deepcopy(base), copy.deepcopy(base)
         first = run_script(item["script"], mine, item["command"], "new") or "applied"
         try:
-            second = run_script(parse_script(json.dumps(json_reply(text))), theirs, item["command"], "new") or "applied"
+            second = run_script(parse_script(json.dumps(zero_based(json_reply(text)))), theirs, item["command"], "new") or "applied"
         except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             second = "invalid"
         if first == second and same_edit(mine, theirs, base):
