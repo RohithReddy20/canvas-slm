@@ -719,9 +719,35 @@ def agree(args):
     print(json.dumps(counts))
 
 
+def merge(args):
+    """One training file from several agreed and relabelled files, without duplicates."""
+    seen, kept, counts = set(), [], Counter()
+    for path in args.inputs:
+        for line in open(path):
+            item = json.loads(line)
+            key = (json.dumps(item["diagram"], sort_keys=True), item["command"])
+            if key in seen:
+                counts["duplicate"] += 1
+                continue
+            seen.add(key)
+            kept.append(item)
+            counts[item.get("author", "kimi-k3")] += 1
+            counts["create+connect"] += any(a["name"] in ("create_shape", "create_schema_box", "create_component")
+                                            for a in item["script"]["actions"]) and \
+                any(a["name"] == "connect_schemas" for a in item["script"]["actions"])
+            counts["refusal"] += not item["script"]["actions"]
+    with open(args.output, "w") as out:
+        for item in kept:
+            out.write(json.dumps(item, ensure_ascii=False) + "\n")
+    print(json.dumps({"rows": len(kept), **counts}))
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
+    merging = commands.add_parser("merge")
+    merging.add_argument("inputs", type=Path, nargs="+")
+    merging.add_argument("--output", type=Path, required=True)
     making = commands.add_parser("export")
     making.add_argument("--bundle", type=Path, required=True)
     making.add_argument("--output", type=Path, required=True)
@@ -751,7 +777,7 @@ def main():
                           help="also write <output>.fixed.jsonl: disagreed rows relabelled with the second "
                                "model's script, marked with this author (the user accepted the terms risk)")
     args = parser.parse_args()
-    {"export": export, "check": check, "second-opinion": second_opinion, "agree": agree}[args.command](args)
+    {"export": export, "check": check, "second-opinion": second_opinion, "agree": agree, "merge": merge}[args.command](args)
 
 
 if __name__ == "__main__":
