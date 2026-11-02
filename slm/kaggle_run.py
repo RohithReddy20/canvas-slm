@@ -25,7 +25,7 @@ LOCAL = ROOT.parent / "runs" / "kaggle"
 OWNER = "rohithresearch"
 DATASET = f"{OWNER}/canvas-270m-v7-accuracy-workflow"
 INPUTS = f"{OWNER}/canvas-slm-inputs"
-INPUT_LIMIT = 5 * 2**20
+INPUT_LIMIT = 64 * 2**20  # answer keys, teacher data and synthetic rows are small; an adapter is 51 MB
 SMALL = r"(\.log|job-status\.json|report[\w-]*\.json|training\.json|autotune\.json)$"
 
 RUNNER = '''import base64, io, json, os, shutil, subprocess, tarfile, time, zipfile
@@ -96,7 +96,7 @@ def code_archive():
 def upload_inputs(paths):
     """Version the private inputs dataset with these files and wait until it is ready."""
     if sum(p.stat().st_size for p in paths) > INPUT_LIMIT:
-        raise SystemExit("Inputs are limited to 5 MB; large files stay off this connection.")
+        raise SystemExit("Inputs are limited to 64 MB; models stay on Kaggle.")
     with tempfile.TemporaryDirectory() as folder:
         for path in paths:
             (Path(folder) / path.name).write_bytes(path.read_bytes())

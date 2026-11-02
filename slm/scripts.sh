@@ -56,6 +56,12 @@ echo "== train"
 TRAINING=(--model Qwen/Qwen3-1.7B --rows "$RUNS/scripts-data/train.jsonl" --output "$OUT")
 # LIMIT trains on that many rows only, for a smoke run.
 [ -z "${LIMIT:-}" ] || TRAINING+=(--limit-rows "$LIMIT")
+# ADAPTER, when set, is a LoRA adapter tar (distil labs' model.tar, holding model-adapter/)
+# trained elsewhere: it is merged and evaluated instead of training here.
+if [ -f "${ADAPTER:-}" ] && [ ! -f "$OUT/merged/config.json" ]; then
+  mkdir -p "$OUT" && tar -xf "$ADAPTER" -C "$OUT"
+  "$TRAIN" merge_adapter.py --adapter "$OUT/model-adapter" --output "$OUT/merged"
+fi
 if [ -f "$OUT/merged/config.json" ]; then
   echo "reusing $OUT/merged"
 elif [ "$GPUS" -gt 1 ]; then
