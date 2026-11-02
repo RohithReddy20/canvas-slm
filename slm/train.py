@@ -28,6 +28,7 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
+import torch.utils.checkpoint
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -37,6 +38,7 @@ PACKED_ATTENTION = ("kernels-community/flash-attn", "flash_attention_2")
 # Dense 16-bit tensor peaks, for the utilisation estimate only.
 PEAK_FLOPS = {"H100": 989e12, "A100": 312e12, "RTX PRO 6000": 500e12, "L4": 121e12, "T4": 65e12}
 PROBE_ROWS = 48
+LOSS_CHUNK = 1024  # reply positions whose logits are in memory at once
 TOLERANCE = 0.02
 HEADROOM = 0.8
 
@@ -153,9 +155,8 @@ class ReplyLoss:
                 input_ids=torch.tensor([ids], device="cuda"),
                 position_ids=torch.tensor([positions], device="cuda"),
             ).last_hidden_state[0]
-            logits = self.logits(hidden[torch.tensor(predictors, device="cuda")])
-            target = torch.tensor(targets, device="cuda")
-            return torch.nn.functional.cross_entropy(logits, target, reduction="sum"), len(ids)
+            selected = hidden[torch.tensor(predictors, device="cuda")]
+            return self.reply_loss(selected, torch.tensor(targets, device="cuda")), len(ids)
         rows = [examples[i][0] + examples[i][1] for i in indices]
         width = max(map(len, rows))
         keep = max(len(examples[i][1]) for i in indices) + 1
@@ -174,11 +175,26 @@ class ReplyLoss:
             attention_mask=mask.cuda(),
             position_ids=(mask.cumsum(-1) - 1).clamp(min=0).cuda(),
         ).last_hidden_state[:, -keep:-1]
-        logits = self.logits(hidden)
-        loss = torch.nn.functional.cross_entropy(
-            logits.flatten(0, 1), labels.cuda().flatten(), ignore_index=-100, reduction="sum"
-        )
-        return loss, int(mask.sum())
+        labels = labels.cuda()
+        replies = labels != -100
+        return self.reply_loss(hidden[replies], labels[replies]), int(mask.sum())
+
+    def chunk_loss(self, hidden, target):
+        return torch.nn.functional.cross_entropy(self.logits(hidden), target, reduction="sum")
+
+    def reply_loss(self, hidden, target):
+        """Summed cross-entropy over reply positions, LOSS_CHUNK positions at a time. The
+        float32 logits of one chunk are 0.6 GB; a whole batch of long replies could need
+        several GB at once, which took a T4 down. Each chunk's logits are recomputed in the
+        backward pass instead of kept."""
+        total = torch.zeros((), device=hidden.device)
+        for start in range(0, len(target), LOSS_CHUNK):
+            piece = (hidden[start : start + LOSS_CHUNK], target[start : start + LOSS_CHUNK])
+            if torch.is_grad_enabled():
+                total = total + torch.utils.checkpoint.checkpoint(self.chunk_loss, *piece, use_reentrant=False)
+            else:
+                total = total + self.chunk_loss(*piece)
+        return total
 
 
 def gpu_query(field):
