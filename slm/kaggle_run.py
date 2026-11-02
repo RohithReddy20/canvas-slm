@@ -125,7 +125,7 @@ def start(args):
             "kernel_type": "script", "is_private": "true", "enable_gpu": "true",
             "enable_internet": "true", "machine_shape": args.accelerator,
             "dataset_sources": [DATASET, *([INPUTS] if args.input or args.with_inputs else [])],
-            "kernel_sources": [f"{OWNER}/{s}" for s in args.reuse], "competition_sources": [],
+            "kernel_sources": [f"{OWNER}/canvas-slm-{s}" for s in args.reuse], "competition_sources": [],
             "model_sources": [],
         }))
         print(kaggle("kernels", "push", "-p", folder, "--accelerator", args.accelerator,
