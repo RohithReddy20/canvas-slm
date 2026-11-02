@@ -1,0 +1,22 @@
+slm/distil_train.py
+  s_e9b3b404ee8816::t_bacdf377429990 49
+  s_e9b3b404ee8816::t_e66adf570f8547 1-20,23-48,50-68,71-76,78-92
+  s_e9b3b404ee8816::t_9d9e6e1473096d 21-22,77
+  s_e9b3b404ee8816::t_09e4a229f0ed1a 69-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "50321567db6299d339b94b108531c1cc4bbceab1",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
