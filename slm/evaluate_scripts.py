@@ -186,9 +186,9 @@ def real(model, rows, constrained=False, fuzzy=False):
                         "outcome": outcome, "correct": semantic_state(session) == row["after"],
                         "relaxed": matches(row, before, semantic_state(session), script),
                         "reply": text[:600]})
-    by = lambda key: {  # noqa: E731
-        value: f"{sum(r['correct'] for r in results if r[key] == value)}/{sum(r[key] == value for r in results)}"
-        for value in sorted({r[key] for r in results})
+    by = lambda key: {  # noqa: E731  (v3 additive and refusal cases have no edit_kind)
+        str(value): f"{sum(r['correct'] for r in results if r[key] == value)}/{sum(r[key] == value for r in results)}"
+        for value in sorted({r[key] for r in results}, key=str)
     }
     return {"total": len(rows), "content_accuracy": sum(r["correct"] for r in results) / len(rows),
             "relaxed_accuracy": sum(r["relaxed"] for r in results) / len(rows),

@@ -62,6 +62,12 @@ if [ -f "${ADAPTER:-}" ] && [ ! -f "$OUT/merged/config.json" ]; then
   mkdir -p "$OUT" && tar -xf "$ADAPTER" -C "$OUT"
   "$TRAIN" merge_adapter.py --adapter "$OUT/model-adapter" --output "$OUT/merged"
 fi
+# A kernel started with --reuse <earlier> finds that kernel's merged student under REUSE
+# and evaluates it again (for a fixed evaluator, say) instead of training.
+REUSE=${REUSE:-/tmp/reuse}
+if [ ! -f "$OUT/merged/config.json" ] && [ -f "$REUSE/scripts-q17/merged/config.json" ]; then
+  mkdir -p "$OUT" && ln -s "$REUSE/scripts-q17/merged" "$OUT/merged"
+fi
 if [ -f "$OUT/merged/config.json" ]; then
   echo "reusing $OUT/merged"
 elif [ "$GPUS" -gt 1 ]; then
