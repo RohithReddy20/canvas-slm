@@ -1,0 +1,21 @@
+slm/evaluate_scripts.py
+  s_e9b3b404ee8816::t_84543fa52b2617 189-191
+slm/scripts.sh
+  s_e9b3b404ee8816::t_4a9cc73ae8b415 65-70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "367348fab0724f4cd87cadbd6815bf8a976a0198",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
