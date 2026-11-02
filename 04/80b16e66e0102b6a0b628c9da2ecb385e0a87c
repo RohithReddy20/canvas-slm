@@ -1,0 +1,23 @@
+slm/kaggle_run.py
+  s_e9b3b404ee8816::t_cfbb74a54a05bb 28,99
+slm/merge_adapter.py
+  s_e9b3b404ee8816::t_808d4dfe647e2b 1-30
+slm/scripts.sh
+  s_e9b3b404ee8816::t_81d5bc73b8a912 59-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0480b16e66e0102b6a0b628c9da2ecb385e0a87c",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
