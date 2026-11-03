@@ -125,7 +125,7 @@ def rewrite(args):
     rows = [json.loads(line) for line in open(args.input)]
     done = set()
     if args.output.exists():
-        done = {json.loads(line)["command"] for line in open(args.output)}
+        done = {json.loads(line)["template"] for line in open(args.output)}
     rng = random.Random(args.seed)
     if args.limit:
         rows = rng.sample(rows, min(args.limit, len(rows)))
@@ -148,7 +148,9 @@ def rewrite(args):
         except (ValueError, KeyError, AttributeError):
             counts["unparsed"] += 1
             return
-        missing = [n for n in names_in(row["script"]) if n.casefold() not in instruction.casefold()]
+        # Names the template itself says; an inherited arrow label, say, need not be repeated.
+        required = [n for n in names_in(row["script"]) if n.casefold() in row["command"].casefold()]
+        missing = [n for n in required if n.casefold() not in instruction.casefold()]
         if missing or not instruction or instruction.casefold() == row["command"].casefold():
             counts["dropped_missing_name" if missing else "dropped_unchanged"] += 1
             return
