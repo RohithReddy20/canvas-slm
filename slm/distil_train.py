@@ -8,6 +8,8 @@ held-out compounds rendered the same way (distil labs' judge scores them; the ca
 scoring stays in evaluate_scripts.py).
 
     python distil_train.py --rows ../runs/distil/train6/scripts-data --output ../runs/distil/train6/dataset
+    python distil_train.py --rows ... --output ... --thin accuracy-train-single=0.25 \\
+        --drop-conversations ../runs/colab/real-test-v3.jsonl     # a quarter of the v7 single-command rows
     distil dataset create --data ../runs/distil/train6/dataset
     distil slm create-from-dataset --smoke <dataset-id>     # 128 longest rows, under a dollar
     distil slm create-from-dataset <dataset-id>             # the whole set
@@ -45,6 +47,20 @@ JUDGE_INSTRUCTIONS = (
 )
 
 
+def conversation_of(row_id):
+    """wildchat:<hash>:d12:r3 and wildchat:<hash>:2 both come from the chat wildchat:<hash>."""
+    return ":".join(row_id.split(":")[:2])
+
+
+def keep(row_id, thin, dropped, rng):
+    if row_id.startswith(("wildchat:", "sharegpt:")) and conversation_of(row_id) in dropped:
+        return False
+    for prefix, fraction in thin.items():
+        if row_id.startswith(prefix):
+            return rng.random() < fraction
+    return True
+
+
 def conversation(chat, answer):
     system, user = [m["content"] for m in chat]
     assert system == SYSTEM, "a training row carries a different system prompt"
@@ -59,12 +75,24 @@ def main():
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--test-rows", type=int, default=200)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--thin", action="append", default=[], metavar="PREFIX=FRACTION",
+                        help="keep only this fraction of the rows whose id starts with PREFIX")
+    parser.add_argument("--drop-conversations", type=Path,
+                        help="a real test key: training rows from its chats stay out (their canvases leak)")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
+    thin = {prefix: float(fraction) for prefix, fraction in (pair.split("=") for pair in args.thin)}
+    dropped = set()
+    if args.drop_conversations:
+        dropped = {conversation_of(json.loads(line)["id"]) for line in open(args.drop_conversations)}
+    rng = random.Random(args.seed)
 
-    seen = set()
+    seen, skipped = set(), 0
     with open(args.rows / "train.jsonl") as source, open(args.output / "train.jsonl", "w") as out:
         for row in map(json.loads, source):
+            if not keep(row["id"], thin, dropped, rng):
+                skipped += 1
+                continue
             item = conversation(row["messages"], row["reply"])
             if item["messages"][0]["content"] in seen:  # the same canvas and command twice
                 continue
@@ -85,7 +113,7 @@ def main():
     json.dump({"task_description": SYSTEM, "llm_as_a_judge_instructions": JUDGE_INSTRUCTIONS},
               open(args.output / "job_description.json", "w"), indent=2)
     (args.output / "config.yaml").write_text(CONFIG.format(student=args.student, epochs=args.epochs))
-    print(json.dumps({"train": len(seen), "test": len(tests)}))
+    print(json.dumps({"train": len(seen), "test": len(tests), "skipped": skipped}))
 
 
 if __name__ == "__main__":
