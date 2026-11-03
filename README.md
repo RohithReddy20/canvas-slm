@@ -323,8 +323,31 @@ hailing, ...; `precise_rewrite.py designs`), and the earlier synthetic diagrams.
 is kept only when its script applies in the simulator and changes the diagram, so the
 scripts are right by construction; `precise_rewrite.py rewrite` then has Opus reword the
 instructions as an author would type them ("label the Redis Cache -> Cron Scheduler
-arrow \"reads\""), kept when the template's names are still all named. Results follow
-(train8: 10,000 template rows; train9: plus 4,191 rewrites).
+arrow \"reads\""), kept when the template's names are still all named.
+
+train9 (distil labs, 23,991 rows: the quarter-v7 set plus 10,000 template rows and 4,191
+Opus rewrites) against distil7, the same recipe without the precise rows. The held-out
+precise rows are 955 template instructions and 403 Opus rewrites on diagrams no training
+row used; a row counts only when the model's script leaves the diagram exactly as the
+generated one does, positions included.
+
+| | distil7 | train9 |
+|---|---|---|
+| Dev commands / compounds | 93.2% / 95.2% | 92.3% / 94.8% |
+| Held-out teacher synthetic | 599/977 | 592/977 |
+| Precise, template phrasing | not trained | 870/955 (91.1%) |
+| Precise, Opus phrasing | not trained | 368/403 (91.3%) |
+| Real v3 edits / additions / refusals | 15 / 4 / 48 | 9 / 6 / 49 |
+
+By edit (train9): connect 118/122, delete arrow 100/105, delete node 70/73, style 45/46,
+redirect 116/122, insert between 293/313, relabel arrow 87/94, rename 115/123, add linked
+303/330, add beside 67/83, replace 74/144. Replace (new node takes over every arrow of the
+old one, then the old one goes) is the one weak edit at 51%; the report now keeps each
+miss with the model's reply so the next run can say why. The six lost v3 edits all go the
+same way: where the key renames a box, train9 creates a new one and rewires its arrows, the
+replace pattern it just learned. distil labs' own test metrics did not move (Binary 89.5,
+Judge 94.5 for train8 and train9), since that split holds no precise rows. train8 (the
+template rows without the Opus rewrites) is scored next.
 
 ### Training speed
 
