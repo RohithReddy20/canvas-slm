@@ -480,16 +480,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--count", type=int, default=8000)
     parser.add_argument("--diagrams", type=Path, help="synthetic rows whose diagrams to edit as well")
+    parser.add_argument("--designs", type=Path, help="precise_rewrite.py designs (teacher-drawn systems)")
     parser.add_argument("--generated", type=float, default=0.6, help="share of rows on generated system designs")
+    parser.add_argument("--design-share", type=float, default=0.3, help="share of rows on the teacher-drawn designs")
     parser.add_argument("--compound", type=float, default=0.15, help="share of rows with two edits")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=3)
     args = parser.parse_args()
     rng = random.Random(args.seed)
     loaded = loaded_diagrams(args.diagrams) if args.diagrams else []
+    designs = loaded_diagrams(args.designs) if args.designs else []
     rows, seen, ops, failures = [], set(), Counter(), 0
     while len(rows) < args.count and failures < args.count * 20:
-        if loaded and rng.random() >= args.generated:
+        roll = rng.random()
+        if designs and roll < args.design_share:
+            diagram = rng.choice(designs)
+        elif loaded and roll >= args.design_share + args.generated * (1 - args.design_share):
             diagram = rng.choice(loaded)
         else:
             diagram = architecture(rng)
