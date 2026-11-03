@@ -202,13 +202,20 @@ def synthetic(model, rows, constrained=False, fuzzy=False):
     from distil_synth import outcome, session_of
 
     texts = model.scripts([messages(r["command"], session_of(r["diagram"])) for r in rows], constrained)
-    outcomes, exact = Counter(), 0
+    outcomes, exact, groups = Counter(), 0, {}
     for row, text in zip(rows, texts, strict=True):
         predicted = session_of(row["diagram"])
         outcomes[apply(text, predicted, row["command"], "new", fuzzy)] += 1
         _, gold = outcome(row["script"], session_of(row["diagram"]), row["command"])
-        exact += (predicted.snapshot(), predicted.canvas["camera"]) == gold
-    return {"total": len(rows), "state_accuracy": exact / max(1, len(rows)), "outcomes": dict(outcomes)}
+        right = (predicted.snapshot(), predicted.canvas["camera"]) == gold
+        exact += right
+        # Rows carry where they came from (teacher, or precise_synth.py's "precise") and the edit.
+        for key in (row.get("source", "teacher"), *(f"op:{op}" for op in str(row.get("op", "")).split("+") if op)):
+            groups.setdefault(key, [0, 0])
+            groups[key][0] += right
+            groups[key][1] += 1
+    return {"total": len(rows), "state_accuracy": exact / max(1, len(rows)), "outcomes": dict(outcomes),
+            "by_source": {key: f"{a}/{b}" for key, (a, b) in sorted(groups.items())}}
 
 
 def main():

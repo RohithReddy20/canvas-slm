@@ -58,8 +58,11 @@ TRAINING=(--model Qwen/Qwen3-1.7B --rows "$RUNS/scripts-data/train.jsonl" --outp
 [ -z "${LIMIT:-}" ] || TRAINING+=(--limit-rows "$LIMIT")
 # ADAPTER, when set, is a LoRA adapter tar (distil labs' model.tar, holding model-adapter/)
 # trained elsewhere: it is merged and evaluated instead of training here.
-if [ -f "${ADAPTER:-}" ] && [ ! -f "$OUT/merged/config.json" ]; then
-  mkdir -p "$OUT" && tar -xf "$ADAPTER" -C "$OUT"
+# Uploads extract archives (Colab's uploader and Kaggle datasets both do), so ADAPTER may
+# also be the extracted model-adapter/ folder.
+if [ -n "${ADAPTER:-}" ] && [ ! -f "$OUT/merged/config.json" ] && { [ -f "$ADAPTER" ] || [ -f "$ADAPTER/adapter_config.json" ]; }; then
+  mkdir -p "$OUT"
+  if [ -d "$ADAPTER" ]; then cp -r "$ADAPTER" "$OUT/model-adapter"; else tar -xf "$ADAPTER" -C "$OUT"; fi
   "$TRAIN" merge_adapter.py --adapter "$OUT/model-adapter" --output "$OUT/merged"
 fi
 # A kernel started with --reuse <earlier> finds that kernel's merged student under REUSE
