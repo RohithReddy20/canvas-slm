@@ -283,6 +283,49 @@ system prompt and `scripts.sh` scores it with `ADAPTER=`), so the loop no longer
 7 Kaggle hours per try; `kaggle_run.py start --reuse <name>` re-scores an earlier
 student in 30 minutes.
 
+### A quarter of the v7 rows, trained on distil labs (2026-11-03)
+
+Of the 53,592 training rows, about 43,000 are v7's own single commands, compounds and
+paraphrases. `distil_train.py --thin accuracy-train-single=0.25 --drop-conversations
+real-test-v3.jsonl` keeps a quarter of the single-command rows (and drops the 61 teacher
+requests whose chats the v3 key came from): 23,413 rows, trained on distil labs in about
+90 minutes for about $3 (job 1e89dfd3), scored on a Colab T4. Against scripts6, all
+languages, constrained decoding:
+
+| | scripts6 (53,592 rows) | distil7 (23,413 rows) |
+|---|---|---|
+| Dev commands (1,700) | 94.6% | 93.2% |
+| Sessions, per turn when the state matches | 95.9% | 93.1% |
+| Compounds | 96.2% | 95.2% |
+| Held-out teacher requests (137) | 122 | 119 |
+| Held-out synthetic rows (977) | 67.1% | 61.3% |
+| Real v3 edits (38) / additions (37) / refusals (50) | 17 / 6 / 49 | 15 / 4 / 48 |
+
+A point or so on the v7 sets and six on the synthetic set: the v7 rows do carry weight,
+but at a quarter of the data the student is within reach of the full one for a fifth of
+the time. Two operational lessons cost a day: Colab's uploader and Kaggle's datasets both
+unpack `.tar` files, so `ADAPTER=.../model.tar` was never found and both platforms
+silently trained from scratch instead (the "hung" Kaggle kernel was a 7-hour retrain that
+used up the weekly 30 GPU hours); `scripts.sh` now also takes the unpacked
+`model-adapter/` folder.
+
+### Precise instructions: the author dictates, the model writes (2026-11-03)
+
+The product use is literal: "between Client and Load Balancer add a Rate Limiter" means
+one new node, the right icon, wired into that path, nothing else. The v3 "additions" are
+mostly "add more detail", which is not that, and the training data had almost no
+rewiring: "between" appears in 242 of 53,592 rows and no row inserts a node on a path.
+`precise_synth.py` generates such instructions with their exact scripts (insert between,
+add linked, add beside, replace keeping arrows, redirect an arrow, delete or relabel an
+arrow, connect, rename, delete, style, and pairs of these) on three kinds of diagrams:
+generated system designs, 90 designs Opus drew for 30 known systems (URL shortener, ride
+hailing, ...; `precise_rewrite.py designs`), and the earlier synthetic diagrams. Every row
+is kept only when its script applies in the simulator and changes the diagram, so the
+scripts are right by construction; `precise_rewrite.py rewrite` then has Opus reword the
+instructions as an author would type them ("label the Redis Cache -> Cron Scheduler
+arrow \"reads\""), kept when the template's names are still all named. Results follow
+(train8: 10,000 template rows; train9: plus 4,191 rewrites).
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
