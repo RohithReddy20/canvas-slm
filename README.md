@@ -234,6 +234,55 @@ from canvases transcribed from real chats and describes how real users ask; `rea
 grows the English test set from the mined follow-ups with a strong model proposing, a
 second model answering from the canvas alone, and a human reviewing the disagreements.
 
+### Real-style synthetic data and the v3 test set (2026-11-03)
+
+`real_label.py` turned 729 English follow-ups from the mined chats into the v3 test set:
+127 cases scored by what they expect (`real_match.matches`): 28 concrete edits, 37
+additions ("add a cache" on a 15-node diagram: something new, wired to the object named),
+9 restyles, 3 layouts and 50 refusals (explanations, code, "more detail everywhere").
+Only 17 of the 729 follow-ups were edits that replay exactly, which is why the kinds exist.
+
+The generation round `distil_synth.py export --profile real` seeded Kimi K3 from
+canvases transcribed from real chats and the ways real users ask (5,434 rows, $48.77);
+Opus 5.5 checked every row and, where it disagreed, wrote the script itself (the user
+accepted the terms risk; such rows stay in separate `*.fixed.jsonl` files with an
+`author` field). Merged with the earlier rounds: 9,800 rows, 6,972 by Kimi and 2,828 by
+Opus, 2,624 of them create-and-connect (120 before). The retrain scripts6-t4 (53,592 rows,
+7 hours on Kaggle) against scripts5 scored on the same sets:
+
+| | scripts5 | scripts6 |
+|---|---|---|
+| Dev commands (1,700) | 94.6% | 94.6% |
+| Sessions, agreement | 95.7% | 54.3% |
+| Compounds | 96.5% | 96.3% |
+| Held-out teacher requests (137) | 83.9% | 88.3% |
+| Held-out synthetic rows (977, new set) | 58.0% | 67.1% |
+| Real v3 English, edits (28) | 7 | 13 |
+| Real v3 English, additions (37) | 1 | 6 |
+| Real v3 English, restyle (9) / layout (3) | 0 / 0 | 0 / 0 |
+| Real v3 English, refusals (50) | 48 | 49 |
+
+Real edits nearly doubled and additions moved off the floor without more false edits on
+the refusal cases. Additions still mostly fail by refusing (10) or by creating the object
+without an arrow to the right anchor (12 applied but unwired). Restyle and layout have no
+training data at all: every case is refused.
+
+Sessions are a coin flip, not a regression: four of the eight dev sessions contain v7's
+"Remove all objects from the selection" (clear the selection), while v7 also labels
+"Remove the selection from the canvas" as delete, and each retrain lands on one side
+(scripts4 54.3%, scripts5 95.7%, scripts6 54.3%). Per-turn accuracy when the state
+matches is 95.9%. A caveat on v3: its canvases overlap the conversations the teacher
+requests were seeded from, so the key's labels are unseen but some canvases are not.
+
+Two training lessons. The merged rows have replies up to 3,600 characters (580 before),
+and the loss materialised float32 logits for every row at the longest reply, about 3 GB
+for one micro-batch; `train.py` now runs the reply positions through the head 1,024 at a
+time under checkpointing. And distil labs trains the same student for $7.77 in under two
+hours (`distil_train.py` exports the rows; the adapter comes back as PEFT LoRA on our
+system prompt and `scripts.sh` scores it with `ADAPTER=`), so the loop no longer needs
+7 Kaggle hours per try; `kaggle_run.py start --reuse <name>` re-scores an earlier
+student in 30 minutes.
+
 ### Training speed
 
 `train.py --autotune` measured on the A100 (Qwen3-1.7B LoRA, rank 64):
