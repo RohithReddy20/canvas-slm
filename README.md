@@ -346,8 +346,27 @@ old one, then the old one goes) is the one weak edit at 51%; the report now keep
 miss with the model's reply so the next run can say why. The six lost v3 edits all go the
 same way: where the key renames a box, train9 creates a new one and rewires its arrows, the
 replace pattern it just learned. distil labs' own test metrics did not move (Binary 89.5,
-Judge 94.5 for train8 and train9), since that split holds no precise rows. train8 (the
-template rows without the Opus rewrites) is scored next.
+Judge 94.5 for train8 and train9), since that split holds no precise rows.
+
+train8 (the same without the 4,191 Opus rewrites) says what the rewrites bought:
+
+| | train8 (templates) | train9 (+ Opus rewrites) |
+|---|---|---|
+| Dev commands / compounds | 94.2% / 96.0% | 92.3% / 94.8% |
+| Held-out teacher synthetic | 597/977 | 592/977 |
+| Precise, template phrasing | 841/955 (88.1%) | 870/955 (91.1%) |
+| Precise, Opus phrasing | 346/403 (85.9%) | 368/403 (91.3%) |
+| Replace / add linked / insert between | 59/144, 280/330, 273/313 | 74/144, 303/330, 293/313 |
+| Real v3 edits / additions / refusals | 11 / 4 / 50 | 9 / 6 / 49 |
+
+The rewrites lift every precise edit by two to five points, most on the Opus phrasing
+they resemble, at a two-point cost on the v7 dev set. Replace stays the weak edit under
+both. Its misses (train8 keeps them in the report) are all the same shape: the new node is
+right and the old one is deleted, but of the old node's arrows the model drops some and
+reverses others (of nine stored misses, 14 of 26 arrows came back right, 6 reversed, 12
+missing). Listing every arrow of a node from the canvas JSON is recall the student does
+not have; the fix is a `replace` action that the runtime rewires itself, as `insert
+between` could also be, so the model only names the old node, the new one and its icon.
 
 ### Training speed
 
