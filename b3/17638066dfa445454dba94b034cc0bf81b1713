@@ -1,0 +1,27 @@
+slm/precise_synth.py
+  s_e9b3b404ee8816::t_53656e86ebe647 388-389
+  s_e9b3b404ee8816::t_44b1d573281df3 1-387,390-514
+slm/evaluate_scripts.py
+  s_e9b3b404ee8816::t_020cf67e6e22de 205,210-218
+slm/precise_rewrite.py
+  s_e9b3b404ee8816::t_710159ae15a819 65,181
+  s_e9b3b404ee8816::t_bbdf9d636b5c02 1-64,66-180,182-191
+slm/scripts.sh
+  s_e9b3b404ee8816::t_91969259ed901c 61-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b317638066dfa445454dba94b034cc0bf81b1713",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
