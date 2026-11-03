@@ -1,0 +1,19 @@
+slm/precise_synth.py
+  s_e9b3b404ee8816::t_345c77d133a143 483,485,492,495-498
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce4fb568dd1478ecec10e02bedfe395e4d51596c",
+  "prompts": {},
+  "sessions": {
+    "s_e9b3b404ee8816": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aef53d56-8f07-4154-a5d1-d17dedfc0a0e",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Rohith <rohithreddyrohi18@gmail.com>"
+    }
+  }
+}
