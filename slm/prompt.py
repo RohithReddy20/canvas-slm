@@ -17,6 +17,7 @@ from actions import (
     recent_context,
     validate_call,
 )
+from extensions import SCRIPT_ACTIONS
 from sessions import shape_name
 
 SYSTEM = (
@@ -62,7 +63,7 @@ def compact_object(item):
 
 
 def compact_call(call):
-    model = ACTION_MODELS[call["name"]][0]
+    model = SCRIPT_ACTIONS[call["name"]][0]
     arguments = {}
     for key, value in call["arguments"].items():
         field = model.model_fields.get(key)
@@ -72,12 +73,17 @@ def compact_call(call):
     return {"name": call["name"], "arguments": arguments}
 
 
-def messages(command, canvas, history=None):
+def context_and_recent(canvas, history):
+    """The compact canvas, recent outcomes, and the short IDs they use."""
     context, identifiers = model_canvas(canvas)
     context["schemas"] = [compact_object(box) for box in context["schemas"]]
     context["shapes"] = [compact_object(shape) for shape in context["shapes"]]
     context["camera"] = {key: number(value) for key, value in context["camera"].items()}
     recent = recent_context(history or [], identifiers)
+    for turn in recent["turns"]:  # frozen recent_context predates frame_id
+        outcome = turn["outcome"]
+        if outcome != "rejected" and "frame_id" in outcome["arguments"]:
+            outcome["arguments"]["frame_id"] = identifiers.get(outcome["arguments"]["frame_id"], "removed")
     recent["turns"] = [
         {
             "command": turn["command"],
@@ -87,6 +93,11 @@ def messages(command, canvas, history=None):
         }
         for turn in recent["turns"]
     ]
+    return context, recent, identifiers
+
+
+def messages(command, canvas, history=None):
+    context, recent, _ = context_and_recent(canvas, history)
     return [
         {"role": "system", "content": SYSTEM},
         {
